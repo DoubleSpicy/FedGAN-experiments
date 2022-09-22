@@ -5,6 +5,7 @@ from typing import OrderedDict
 import numpy as np
 import math
 import sys
+import random
 
 import torchvision.transforms as transforms
 from torchvision.utils import save_image
@@ -17,7 +18,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 
-from tqdm import tqdm
+import asyncio
 
 os.makedirs("images", exist_ok=True)
 
@@ -33,6 +34,7 @@ n_critic = 5
 clip_value = 0.01
 sample_interval = 400
 client_cnt = 2
+share_D = False
 
 
 # Configure data loader
@@ -48,7 +50,34 @@ dataloader = torch.utils.data.DataLoader(
     shuffle=True,
 )
 
+trainset = datasets.MNIST(
+        "../../data/mnist",
+        train=True,
+        download=True,
+        transform=transforms.Compose([transforms.ToTensor(), transforms.Normalize([0.5], [0.5])]),
+    )
 
+idx = (trainset.targets==1) | (trainset.targets==9) # select digit = 1 and 9 only
+trainset.targets = trainset.targets[idx]
+trainset.data = trainset.data[idx]
+
+# prob = 0.1
+
+# prob_for_classes = [prob if val == 9 else 1-prob for val in trainset.targets] # binary prob assignment
+# prob_1 = list(random.choices(trainset.targets, weights=prob_for_classes, k=1)[0] for i in range(len(trainset)))
+
+trainloader = torch.utils.data.DataLoader(trainset, batch_size=4,
+                                            shuffle=True, num_workers=2)
+# evens = list(range(0, len(trainset), 2))
+# odds = list(range(1, len(trainset), 2))
+# trainset_1 = torch.utils.data.Subset(trainset, evens)
+# trainset_2 = torch.utils.data.Subset(trainset, odds)
+        
+
+# trainloader_1 = torch.utils.data.DataLoader(trainset_1, batch_size=4,
+#                                             shuffle=True, num_workers=2)
+# trainloader_2 = torch.utils.data.DataLoader(trainset_2, batch_size=4,
+#                                             shuffle=True, num_workers=2)
 
 img_shape = (channels, img_size, img_size)
 
@@ -111,31 +140,45 @@ class Server():
         print("averaging models on %d clients..."%(len(self.clients))) 
         averaged_gen = OrderedDict()
         averaged_dis = OrderedDict()
-        for it, client in tqdm(enumerate(self.client)):
+        for it, client in enumerate(self.clients):
             gen_params = client.generator.state_dict()
             dis_params = client.discriminator.state_dict()
-
+            coefficient = 1/len(self.clients)
             for idx, val in gen_params.items():
-                averaged_gen[idx] += val * len(self.clients)
+                if idx not in averaged_gen:
+                    averaged_gen[idx] = 0
+                averaged_gen[idx] += val * coefficient
             for idx, val in dis_params.items():
-                averaged_dis[idx] += val * len(self.clients)
+                if idx not in averaged_dis:
+                    averaged_dis[idx] = 0
+                averaged_dis[idx] += val * coefficient
 
         print("updating models for all clients")
-        for idx, client in tqdm(enumerate(self.clients)):
-            client.generator = gen_params
-            client.discriminator = dis_params
+        for idx, client in enumerate(self.clients):
+            # client.generator.model = nn.Linear(1,1)
+            client.generator.load_state_dict(gen_params)
+            # client.discriminator.model = nn.Linear(1,1)
+            client.discriminator.load_state_dict(dis_params)
+        print("done.")
+
+    async def _async_train(self, epoch):
+        tasks = [client.train_1_epoch(epoch+1) for idx, client in enumerate(self.clients)]
+        await asyncio.wait(tasks)
+        # for idx, client in enumerate(self.clients):
+        #     client.train_1_epoch(epoch+1)
 
     def train(self):
         for epoch in range(n_epochs):
-            for idx, client in enumerate(self.clients):
-                client.train_1_epoch(epoch)
-            self.average()
+            asyncio.run(self._async_train(epoch))
+        self.average()
+
 class Client():
     # each client has one generator and discriminator
-    def __init__(self):
+    def __init__(self, cid):
         self.generator = Generator()
         self.discriminator = Discriminator()
         self.batches_done = 0
+        self.id = cid
 
         # Optimizers
         self.optimizer_G = torch.optim.RMSprop(self.generator.parameters(), lr=lr)
@@ -144,13 +187,17 @@ class Client():
         if cuda:
             self.generator.cuda()
             self.discriminator.cuda()
+
+        # init own dataset based on cid
+
         
 
-    def train_1_epoch(self, epoch):
+    async def train_1_epoch(self, epoch):
         # attrs = vars(self)
-        for i, (imgs, _) in enumerate(dataloader):
+        for i, (imgs, _) in enumerate(trainloader):
 
             # Configure input
+            
             real_imgs = Variable(imgs.type(Tensor))
 
             # ---------------------
@@ -193,8 +240,8 @@ class Client():
                 self.optimizer_G.step()
 
                 print(
-                    "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-                    % (epoch, n_epochs, self.batches_done % len(dataloader), len(dataloader), loss_D.item(), loss_G.item())
+                    "[cid: %d] [Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
+                    % (self.id, epoch, n_epochs, self.batches_done % len(dataloader), len(dataloader), loss_D.item(), loss_G.item())
                 )
 
             if self.batches_done % sample_interval == 0:
@@ -203,84 +250,11 @@ class Client():
 
             self.batches_done += 1
 # make N clients
-client_list = [Client() for x in range(client_cnt)]
+client_list = [Client(x) for x in range(1, client_cnt+1)]
 
-
+# create server
 server = Server(client_list)
-# Initialize generator and discriminator
 
+
+# start training
 server.train()
-
-
-# if cuda:
-#     generator.cuda()
-#     discriminator.cuda()
-
-
-
-# Optimizers
-# optimizer_G = torch.optim.RMSprop(generator.parameters(), lr=lr)
-# optimizer_D = torch.optim.RMSprop(discriminator.parameters(), lr=lr)
-
-# Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
-
-# ----------
-#  Training
-# ----------
-
-# batches_done = 0
-# for epoch in range(n_epochs):
-#     for i, (imgs, _) in enumerate(dataloader):
-
-#         # Configure input
-#         real_imgs = Variable(imgs.type(Tensor))
-
-#         # ---------------------
-#         #  Train Discriminator
-#         # ---------------------
-
-#         optimizer_D.zero_grad()
-
-#         # Sample noise as generator input
-#         z = Variable(Tensor(np.random.normal(0, 1, (imgs.shape[0], latent_dim))))
-
-#         # Generate a batch of images
-#         fake_imgs = generator(z).detach()
-#         # Adversarial loss
-#         loss_D = -torch.mean(discriminator(real_imgs)) + torch.mean(discriminator(fake_imgs))
-
-#         loss_D.backward()
-#         optimizer_D.step()
-
-#         # Clip weights of discriminator
-#         for p in discriminator.parameters():
-#             p.data.clamp_(-clip_value, clip_value)
-
-
-#         # Train the generator every n_critic iterations
-#         if i % n_critic == 0:
-
-#             # -----------------
-#             #  Train Generator
-#             # -----------------
-
-#             optimizer_G.zero_grad()
-
-#             # Generate a batch of images
-#             gen_imgs = generator(z)
-#             # Adversarial loss
-#             loss_G = -torch.mean(discriminator(gen_imgs))
-
-#             loss_G.backward()
-#             optimizer_G.step()
-
-#             print(
-#                 "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-#                 % (epoch, n_epochs, batches_done % len(dataloader), len(dataloader), loss_D.item(), loss_G.item())
-#             )
-
-#         if batches_done % sample_interval == 0:
-#             save_image(gen_imgs.data[:25], "images/%d.png" % batches_done, nrow=5, normalize=True)
-        
-
-#         batches_done += 1
