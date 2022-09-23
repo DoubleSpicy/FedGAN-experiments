@@ -10,7 +10,8 @@ import random
 import torchvision.transforms as transforms
 from torchvision.utils import save_image
 
-from torch.utils.data import DataLoader
+from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader, random_split
 from torchvision import datasets
 from torch.autograd import Variable
 
@@ -19,6 +20,8 @@ import torch.nn.functional as F
 import torch
 
 import asyncio
+
+
 
 os.makedirs("images", exist_ok=True)
 
@@ -39,45 +42,46 @@ share_D = False
 
 # Configure data loader
 os.makedirs("../../data/mnist", exist_ok=True)
-dataloader = torch.utils.data.DataLoader(
-    datasets.MNIST(
-        "../../data/mnist",
-        train=True,
-        download=True,
-        transform=transforms.Compose([transforms.ToTensor(), transforms.Normalize([0.5], [0.5])]),
-    ),
-    batch_size=batch_size,
-    shuffle=True,
-)
+# dataloader = torch.utils.data.DataLoader(
+#     datasets.MNIST(
+#         "../../data/mnist",
+#         train=True,
+#         download=True,
+#         transform=transforms.Compose([transforms.ToTensor(), transforms.Normalize([0.5], [0.5])]),
+#     ),
+#     batch_size=batch_size,
+#     shuffle=True,
+# )
 
-trainset = datasets.MNIST(
+dataset = datasets.MNIST(
         "../../data/mnist",
         train=True,
         download=True,
         transform=transforms.Compose([transforms.ToTensor(), transforms.Normalize([0.5], [0.5])]),
     )
+print(len(dataset))
+# select digit = 1 and 9 only
+idx = (dataset.targets==1) | (dataset.targets==9) 
+dataset.targets = dataset.targets[idx]
+dataset.data = dataset.data[idx]
+print(len(dataset))
 
-idx = (trainset.targets==1) | (trainset.targets==9) # select digit = 1 and 9 only
-trainset.targets = trainset.targets[idx]
-trainset.data = trainset.data[idx]
+# split
+test_len = int(len(dataset)*0.8)
+trainset, testset = random_split(dataset, [test_len, len(dataset)-test_len], generator=torch.Generator().manual_seed(42))
+print("train and test set size: ", len(trainset), len(testset))
+
+
 
 # prob = 0.1
 
 # prob_for_classes = [prob if val == 9 else 1-prob for val in trainset.targets] # binary prob assignment
 # prob_1 = list(random.choices(trainset.targets, weights=prob_for_classes, k=1)[0] for i in range(len(trainset)))
 
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=4,
+trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
                                             shuffle=True, num_workers=2)
-# evens = list(range(0, len(trainset), 2))
-# odds = list(range(1, len(trainset), 2))
-# trainset_1 = torch.utils.data.Subset(trainset, evens)
-# trainset_2 = torch.utils.data.Subset(trainset, odds)
-        
-
-# trainloader_1 = torch.utils.data.DataLoader(trainset_1, batch_size=4,
-#                                             shuffle=True, num_workers=2)
-# trainloader_2 = torch.utils.data.DataLoader(trainset_2, batch_size=4,
-#                                             shuffle=True, num_workers=2)
+testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+                                            shuffle=True, num_workers=2)
 
 img_shape = (channels, img_size, img_size)
 
@@ -148,17 +152,19 @@ class Server():
                 if idx not in averaged_gen:
                     averaged_gen[idx] = 0
                 averaged_gen[idx] += val * coefficient
-            for idx, val in dis_params.items():
-                if idx not in averaged_dis:
-                    averaged_dis[idx] = 0
-                averaged_dis[idx] += val * coefficient
+            if share_D:
+                for idx, val in dis_params.items():
+                    if idx not in averaged_dis:
+                        averaged_dis[idx] = 0
+                    averaged_dis[idx] += val * coefficient
 
         print("updating models for all clients")
         for idx, client in enumerate(self.clients):
             # client.generator.model = nn.Linear(1,1)
             client.generator.load_state_dict(gen_params)
             # client.discriminator.model = nn.Linear(1,1)
-            client.discriminator.load_state_dict(dis_params)
+            if share_D:
+                client.discriminator.load_state_dict(dis_params)
         print("done.")
 
     async def _async_train(self, epoch):
@@ -172,6 +178,9 @@ class Server():
             asyncio.run(self._async_train(epoch))
         self.average()
 
+    def val(self):
+        pass
+        
 class Client():
     # each client has one generator and discriminator
     def __init__(self, cid):
@@ -241,7 +250,7 @@ class Client():
 
                 print(
                     "[cid: %d] [Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-                    % (self.id, epoch, n_epochs, self.batches_done % len(dataloader), len(dataloader), loss_D.item(), loss_G.item())
+                    % (self.id, epoch, n_epochs, self.batches_done % len(trainloader), len(trainloader), loss_D.item(), loss_G.item())
                 )
 
             if self.batches_done % sample_interval == 0:
