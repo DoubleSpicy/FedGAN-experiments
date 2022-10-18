@@ -1,1 +1,5 @@
 images
+discriminator_pid*
+generator_pid*
+testimg*
+*pycache*
