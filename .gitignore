@@ -3,3 +3,7 @@ discriminator_pid*
 generator_pid*
 testimg*
 *pycache*
+run*
+data
+pack
+dataset_transform

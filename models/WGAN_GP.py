@@ -3,9 +3,12 @@ import torch
 import time as t
 import os 
 from torchvision import utils
-from torch.autograd import Variable
 from torch import autograd
 from utils.loader import save_model
+
+from utils.helper_functions import get_torch_variable
+from torch.autograd import Variable
+
 class Generator(torch.nn.Module):
     def __init__(self, channels):
         super().__init__()
@@ -43,13 +46,11 @@ class Generator(torch.nn.Module):
         return self.output(x)
 
 class Discriminator(torch.nn.Module):
-    def __init__(self, channels, debug=False, n_critic=10):
+    def __init__(self, channels):
         super().__init__()
         # Filters [256, 512, 1024]
         # Input_dim = channels (Cx64x64)
         # Output_dim = 1
-        self.debug = debug
-        self.n_critic = n_critic
         self.main_module = nn.Sequential(
             # Omitting batch normalization in critic because our new penalized training objective (WGAN with gradient penalty) is no longer valid
             # in this setting, since we penalize the norm of the critic's gradient with respect to each input independently and not the enitre batch.
@@ -99,7 +100,8 @@ def train_1_epoch(generator: Generator,
                     n_epochs=1000, 
                     lambda_term=10,
                     g_iter=-1,
-                    id=-1):
+                    id=-1,
+                    root=''):
     t_begin = t.time()
 
     
@@ -178,8 +180,8 @@ def train_1_epoch(generator: Generator,
     print(f'Generator iteration: {g_iter}/{n_epochs}, g_loss: {g_loss}')
     # Saving model and sampling images every 1000th generator iterations
     if (g_iter) % 100 == 0:
-        if not os.path.exists('training_result_images/'):
-            os.makedirs('training_result_images/')
+        if not os.path.exists('{}/training_result_images/'.format(root)):
+            os.makedirs('{}/training_result_images/'.format(root))
 
         # Denormalize images and save them in grid 8x8
         z = get_torch_variable(torch.randn(800, 100, 1, 1))
@@ -187,7 +189,7 @@ def train_1_epoch(generator: Generator,
         samples = samples.mul(0.5).add(0.5)
         samples = samples.data.cpu()[:64]
         grid = utils.make_grid(samples)
-        utils.save_image(grid, 'training_result_images/img_generatori_iter_{}_pid_{}.png'.format(str(g_iter).zfill(3), id))
+        utils.save_image(grid, '{}/training_result_images/img_generatori_iter_{}_pid_{}.png'.format(root, str(g_iter).zfill(3), id))
 
         # Testing
         time = t.time() - t_begin
@@ -200,15 +202,10 @@ def train_1_epoch(generator: Generator,
     t_end = t.time()
     print('Time of training-{}'.format((t_end - t_begin)))
     # Save the trained parameters
-    save_model(generator, discriminator, id)
+    save_model(generator, discriminator, id, root)
 
 
 
-def get_torch_variable(arg, cuda=True, cuda_index=0):
-    if cuda:
-        return Variable(arg).cuda(cuda_index)
-    else:
-        return Variable(arg)
 
 
 

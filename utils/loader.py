@@ -12,7 +12,7 @@ import random
 import numpy as np
 import cv2 as cv
 from PIL import Image
-
+import math
 
 import os
 
@@ -53,10 +53,10 @@ def load_model(filename, model):
 
 
 
-def save_model(generator, discriminator, id):
-    torch.save(generator.state_dict(), './generator_pid_{}.pkl'.format(id))
-    torch.save(discriminator.state_dict(), './discriminator_pid_{}.pkl'.format(id))
-    print('Models save to ./generator_pid_{}.pkl & ./discriminator_pid_{}.pkl '.format(id, id))
+def save_model(generator, discriminator, id, root):
+    torch.save(generator.state_dict(), '{}/generator_pid_{}.pkl'.format(root, id))
+    torch.save(discriminator.state_dict(), '{}/discriminator_pid_{}.pkl'.format(root, id))
+    print('Models save to {}/generator_pid_{}.pkl & {}/discriminator_pid_{}.pkl '.format(root, id, root, id))
 
 class CustomColorChange():
     ''' Change background color
@@ -128,10 +128,12 @@ def load_dataset(random_colors='1_per_group',
                 channels=3, 
                 batch_size=64,
                 colors:tuple = None, 
-                debug=False):
+                debug=False,
+                proportion=0.2,
+                root=''):
     if random_colors == 'all_random':
         dataset = datasets.MNIST(
-                "../../data/mnist",
+                "{}/data/mnist".format(root),
                 train=True,
                 download=True,
                 transform = transforms.Compose([
@@ -141,6 +143,7 @@ def load_dataset(random_colors='1_per_group',
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, ), (0.5, )),
                 ]))
+
         print(len(dataset))
         trainset = random_split(dataset, cal_split_lengths(len(dataset), client_cnt), generator=torch.Generator().manual_seed(42))
     elif random_colors == '1_per_group':
@@ -148,7 +151,7 @@ def load_dataset(random_colors='1_per_group',
         for i in range(client_cnt):
             trainset.append(
                 datasets.MNIST(
-                "../../data/mnist",
+                "{}/data/mnist".format(root),
                 train=True,
                 download=True,
                 transform = transforms.Compose([
@@ -160,16 +163,19 @@ def load_dataset(random_colors='1_per_group',
                 ])
             ))
 
-        for i in range(client_cnt-1):
+        for i in range(math.floor(client_cnt*(1-proportion))):
+            print("a")
             idx = [prob_choose(i, [0], [1]) for i in trainset[i].targets] # random sampling
             trainset[i].targets = trainset[i].targets[idx]
             trainset[i].data = trainset[i].data[idx]
             print("trainset[i] length:", len(trainset[i]))
 
-        idx = [prob_choose(i, [1], [1]) for i in trainset[client_cnt-1].targets] # random sampling
-        trainset[client_cnt-1].targets = trainset[client_cnt-1].targets[idx]
-        trainset[client_cnt-1].data = trainset[client_cnt-1].data[idx]
-        print("trainset[i] length:", len(trainset[client_cnt-1]))
+        for i in range(math.floor(client_cnt*(1-proportion)), client_cnt):
+            print("b")
+            idx = [prob_choose(i, [1], [1]) for i in trainset[i].targets] # random sampling
+            trainset[i].targets = trainset[i].targets[idx]
+            trainset[i].data = trainset[i].data[idx]
+            print("trainset[i] length:", len(trainset[i]))
 
     print('=======================')
     trainloader = list()

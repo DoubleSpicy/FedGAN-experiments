@@ -1,3 +1,4 @@
+from genericpath import exists
 import sys, os
 sys.path.append(os.getcwd())
 
@@ -27,21 +28,27 @@ import shutil
 from utils.loader import load_dataset, get_infinite_batches, load_model
 
 import matplotlib.pyplot as plt
-os.makedirs("../../data/mnist", exist_ok=True)
 
-dir = './dataset_transform'
-if os.path.exists(dir):
-    shutil.rmtree(dir)
-os.makedirs(dir)
+from datetime import datetime
+time_now = datetime.now().strftime('%Y-%m-%d-%H:%M:%S')
+root = "run"
+os.makedirs("run", exist_ok=True)
+root += time_now
+# os.makedirs("{}/data/mnist".format(root), exist_ok=True)
 
-if os.path.exists('./images'):
-    shutil.rmtree('./images')
-os.makedirs('./images')
+# dir = '{}/dataset_transform'.format(root)
+# if os.path.exists(dir):
+#     shutil.rmtree(dir)
+# os.makedirs(dir)
+
+# if os.path.exists('{}/images'.format(root)):
+#     shutil.rmtree('{}/images'.format(root))
+# os.makedirs('{}/images'.format(root))
 
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model', type=str, default='WGAN-GP', required=False)
+parser.add_argument('--model', type=str, default='GAN', required=False)
 parser.add_argument('--n_epochs', type=int, default=1000, required=False)
 parser.add_argument('--batch_size', type=int, default=64, required=False)
 parser.add_argument('--channels', type=int, default=3, required=False)
@@ -50,11 +57,12 @@ parser.add_argument('--client_cnt', type=int, default=5, required=False)
 parser.add_argument('--share_D', type=bool, default=False, required=False)
 parser.add_argument('--load_G', type=bool, default=False, required=False)
 parser.add_argument('--load_D', type=bool, default=False, required=False)
-parser.add_argument('--debug', type=bool, default=True, required=False)
-parser.add_argument('--proportion', type=float, default=0.2, required=False)
+parser.add_argument('--debug', type=bool, default=False, required=False)
+parser.add_argument('--proportion', type=float, default=0.8, required=False)
 parser.add_argument('--random_colors', type=str, default='1_per_group', required=False)
 parser.add_argument('--resize_to', type=int, default=32, required=False)
 args = parser.parse_args()
+print(args.debug)
 n_epochs = args.n_epochs
 print("n_epochs", n_epochs)
 batch_size = args.batch_size
@@ -83,19 +91,23 @@ cuda = True if torch.cuda.is_available() else False
 print("is cuda available:", cuda)
 Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
+print("debug:", debug)
 trainloader = load_dataset(random_colors='1_per_group', 
                 client_cnt=5, 
                 channels=3, 
                 batch_size=64,
                 colors = None, 
-                debug=False)
+                debug=debug,
+                proportion=proportion,
+                root='.')
 
 # ====================^^^^^datasets^^^^^=========================
 
 # model selection, load G and D architecture
 if model == 'WGAN-GP':
     from models.WGAN_GP import Generator, Discriminator, train_1_epoch
-
+elif model == 'GAN':
+    from models.GAN import Generator, Discriminator, train_1_epoch
 
 
 
@@ -103,7 +115,10 @@ class Server():
     # for doing model averaging after updating local ones
     def __init__(self, client_list:list()):
         self.clients = client_list
-        self.generator = Generator(channels)
+        if model == 'WGAN-GP':
+            self.generator = Generator(channels)
+        elif model == 'GAN':
+            self. generator = Generator(img_shape=(3, 32, 32))
         # return optimizer here
         self.g_iter = 1
 
@@ -140,8 +155,6 @@ class Server():
 
     def _train(self, epoch):
         for idx, client in enumerate(self.clients):
-            if debug:
-                print("generator optimizer id:", id(self.generator.g_optimizer))
             train_1_epoch(self.generator, 
             client.discriminator, 
             cuda=cuda, 
@@ -152,8 +165,9 @@ class Server():
             n_epochs=n_epochs,
             lambda_term=client.lambda_term,
             g_iter=self.g_iter,
-            id=client.id)
-
+            id=client.id,
+            root=root)
+        self.g_iter += 1
     def train(self):
         for epoch in range(n_epochs):
             self._train(epoch)
@@ -182,7 +196,10 @@ class Server():
 class Client():
     # each client has one generator and discriminator
     def __init__(self, cid):
-        self.discriminator = Discriminator(channels, debug, n_critic)
+        if model == 'WGAN-GP':
+            self.discriminator = Discriminator(channels)
+        elif model == 'GAN':
+            self.discriminator = Discriminator(img_shape=(3, 32, 32))
         self.batches_done = 0
         self.id = cid
         self.cuda = cuda
@@ -212,4 +229,4 @@ server = Server(client_list)
 server.train()
 # server.val()
 
-
+print("done")
