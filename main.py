@@ -5,7 +5,7 @@ sys.path.append(os.getcwd())
 
 import argparse
 # import enum
-from typing import OrderedDict
+from collections import OrderedDict
 import numpy as np
 # import math
 
@@ -13,7 +13,7 @@ import numpy as np
 
 # import enum
 import os
-from typing import OrderedDict
+
 import numpy as np
 # import math
 # import sys
@@ -23,28 +23,10 @@ import numpy as np
 # import torch.nn as nn
 # import torch.nn.functional as F
 import torch
-import shutil
-
 from utils.loader import load_dataset, get_infinite_batches, load_model
 
-import matplotlib.pyplot as plt
-
-from datetime import datetime
-time_now = datetime.now().strftime('%Y-%m-%d-%H:%M:%S')
-root = "run"
-os.makedirs("run", exist_ok=True)
-root += time_now
-# os.makedirs("{}/data/mnist".format(root), exist_ok=True)
-
-# dir = '{}/dataset_transform'.format(root)
-# if os.path.exists(dir):
-#     shutil.rmtree(dir)
-# os.makedirs(dir)
-
-# if os.path.exists('{}/images'.format(root)):
-#     shutil.rmtree('{}/images'.format(root))
-# os.makedirs('{}/images'.format(root))
-
+import time
+global_timer = time.time()
 
 
 parser = argparse.ArgumentParser()
@@ -61,20 +43,15 @@ parser.add_argument('--debug', type=bool, default=False, required=False)
 parser.add_argument('--proportion', type=float, default=0.8, required=False)
 parser.add_argument('--random_colors', type=str, default='1_per_group', required=False)
 parser.add_argument('--resize_to', type=int, default=32, required=False)
+parser.add_argument('--time_now', type=str, default='time:N/A', required=False)
 args = parser.parse_args()
 print(args.debug)
 n_epochs = args.n_epochs
 print("n_epochs", n_epochs)
 batch_size = args.batch_size
 model = args.model
-# lr = 0.00005
-# n_cpu = 8
-# latent_dim = 100
-# img_size = 28
 channels = args.channels
 n_critic = args.n_critic
-# clip_value = 0.01
-# sample_interval = 400
 client_cnt = args.client_cnt
 share_D = args.share_D
 debug = args.debug # global debug variable
@@ -83,8 +60,9 @@ proportion = args.proportion
 random_colors = args.random_colors
 resize_to = 32
 
-
-
+os.makedirs("runs", exist_ok=True)
+root = "runs/" + args.time_now
+os.makedirs(root, exist_ok=True)
 
 
 cuda = True if torch.cuda.is_available() else False
@@ -106,8 +84,10 @@ trainloader = load_dataset(random_colors='1_per_group',
 # model selection, load G and D architecture
 if model == 'WGAN-GP':
     from models.WGAN_GP import Generator, Discriminator, train_1_epoch
+    print("loaded WGAN-GP model")
 elif model == 'GAN':
     from models.GAN import Generator, Discriminator, train_1_epoch
+    print("loaded vanilla GAN model")
 
 
 
@@ -229,4 +209,5 @@ server = Server(client_list)
 server.train()
 # server.val()
 
+print("total time taken:", time.time()-global_timer)
 print("done")

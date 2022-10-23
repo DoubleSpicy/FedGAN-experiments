@@ -179,7 +179,7 @@ def train_1_epoch(generator: Generator,
     generator.g_optimizer.step()
     print(f'Generator iteration: {g_iter}/{n_epochs}, g_loss: {g_loss}')
     # Saving model and sampling images every 1000th generator iterations
-    if (g_iter) % 100 == 0:
+    if (g_iter-1) % 100 == 0:
         if not os.path.exists('{}/training_result_images/'.format(root)):
             os.makedirs('{}/training_result_images/'.format(root))
 

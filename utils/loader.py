@@ -73,18 +73,10 @@ class CustomColorChange():
     
     def __call__(self, imgPIL):
         imgRGB = np.array(imgPIL)
-        imgBGR = cv.cvtColor(imgRGB, cv.COLOR_RGB2BGR)
-
-        # imgRGB = cv.cvtColor(imgRGB, cv.COLOR_BGR2BGR)
-        imgHSV = cv.cvtColor(imgBGR, cv.COLOR_RGB2HSV)
-        if self.debug:
-            cv.imwrite('testimgHSV.jpg',cv.cvtColor(imgHSV, cv.COLOR_HSV2BGR))
-
+        imgHSV = cv.cvtColor(imgRGB, cv.COLOR_RGB2HSV)
         lower = np.array([0, 0, 0])
         upper = np.array([180, 255, 125])
         mask = cv.inRange(imgHSV, lower, upper)
-        cv.imwrite('testimgMask.jpg', cv.cvtColor(mask, cv.COLOR_GRAY2BGR))
-
         color_mask = np.zeros((32, 32, 3), np.uint8)
         # color_mask[:] = (125, 180, 255) # red/random
         if self.all_random:
@@ -92,20 +84,16 @@ class CustomColorChange():
         else:
             color_mask[:] = self.colors # red/random
             # print(self.colors)
-        if self.debug:
-            cv.imwrite('testimgColorMask.jpg', cv.cvtColor(color_mask, cv.COLOR_HSV2BGR))
         color_mask = cv.bitwise_and(color_mask, color_mask, mask=mask)
-        imgBGR = cv.add(imgBGR, cv.cvtColor(color_mask, cv.COLOR_HSV2BGR))
-        if self.debug:
-            cv.imwrite('testimgMasked.jpg', cv.cvtColor(imgBGR, cv.COLOR_BGR2RGB))
-        pil_img = BGR2PIL(imgBGR)
-        if self.debug:
-            pil_img.save('testimgPIL.jpg')
-        # print("called!!")
+        imgRGB = cv.add(imgRGB, cv.cvtColor(color_mask, cv.COLOR_HSV2RGB))
+        # cv.imwrite('test.jpg', imgRGB)
+
         if self.first_time:
             print(self.colors)
             self.first_time = False
-        return pil_img
+        return imgRGB
+
+    
 
 
 
@@ -140,8 +128,8 @@ def load_dataset(random_colors='1_per_group',
                     transforms.Resize(32),
                     transforms.Grayscale(3),
                     CustomColorChange(colors=colors, all_random=True, debug=debug),
-                    transforms.ToTensor(),
-                    transforms.Normalize((0.5, ), (0.5, )),
+                    # transforms.ToTensor(),
+                    # transforms.Normalize((0.5, ), (0.5, )),
                 ]))
 
         print(len(dataset))
@@ -154,24 +142,27 @@ def load_dataset(random_colors='1_per_group',
                 "{}/data/mnist".format(root),
                 train=True,
                 download=True,
-                transform = transforms.Compose([
+                transform=transforms.Compose([
                     transforms.Resize(32),
                     transforms.Grayscale(channels),
-                    CustomColorChange(colors=colors, all_random=False, debug=debug),
+                    # CustomColorChange(colors=colors, all_random=False, debug=debug),
                     transforms.ToTensor(),
-                    transforms.Normalize((0.5, ), (0.5, )),
+                    transforms.Normalize((0.5, ), (0.5, ))
                 ])
             ))
 
-        for i in range(math.floor(client_cnt*(1-proportion))):
+        
+
+
+        for i in range(math.ceil(client_cnt*(1-proportion))):
             print("a")
             idx = [prob_choose(i, [0], [1]) for i in trainset[i].targets] # random sampling
             trainset[i].targets = trainset[i].targets[idx]
             trainset[i].data = trainset[i].data[idx]
             print("trainset[i] length:", len(trainset[i]))
 
-        for i in range(math.floor(client_cnt*(1-proportion)), client_cnt):
-            print("b")
+        for i in range(math.ceil(client_cnt*(1-proportion)), client_cnt):
+            print("b", math.ceil(client_cnt*(1-proportion)))
             idx = [prob_choose(i, [1], [1]) for i in trainset[i].targets] # random sampling
             trainset[i].targets = trainset[i].targets[idx]
             trainset[i].data = trainset[i].data[idx]
