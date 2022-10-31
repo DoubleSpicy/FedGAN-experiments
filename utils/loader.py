@@ -128,8 +128,8 @@ def load_dataset(random_colors='1_per_group',
                     transforms.Resize(32),
                     transforms.Grayscale(3),
                     CustomColorChange(colors=colors, all_random=True, debug=debug),
-                    # transforms.ToTensor(),
-                    # transforms.Normalize((0.5, ), (0.5, )),
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.5, ), (0.5, )),
                 ]))
 
         print(len(dataset))
@@ -151,22 +151,38 @@ def load_dataset(random_colors='1_per_group',
                 ])
             ))
 
-        
+        # for i in range(client_cnt):
+        #     idx = [prob_choose(i, [0, 1], [proportion, 1-proportion]) for i in trainset[i].targets] # random sampling
+        #     trainset[i].targets = trainset[i].targets[idx]
+        #     trainset[i].data = trainset[i].data[idx]
+        #     print("trainset[i] length:", len(trainset[i]))
+        # for i in range(client_cnt):
+        #     if(i % 2 == 0):
+        #         print(i, "zeroes")
+        #         idx = [prob_choose(i, [0], [1]) for i in trainset[i].targets] # random sampling
+        #         trainset[i].targets = trainset[i].targets[idx]
+        #         trainset[i].data = trainset[i].data[idx]
+        #         print("trainset[i] length:", len(trainset[i]))
+        #     else:
+        #         print(i, "ones")
+        #         idx = [prob_choose(i, [1], [1]) for i in trainset[i].targets] # random sampling
+        #         trainset[i].targets = trainset[i].targets[idx]
+        #         trainset[i].data = trainset[i].data[idx]
+        #         print("trainset[i] length:", len(trainset[i]))
 
+        # for i in range(math.ceil(client_cnt*(1-proportion))):
+        #     print("a")
+        #     idx = [prob_choose(i, [0], [1]) for i in trainset[i].targets] # random sampling
+        #     trainset[i].targets = trainset[i].targets[idx]
+        #     trainset[i].data = trainset[i].data[idx]
+        #     print("trainset[i] length:", len(trainset[i]))
 
-        for i in range(math.ceil(client_cnt*(1-proportion))):
-            print("a")
-            idx = [prob_choose(i, [0], [1]) for i in trainset[i].targets] # random sampling
-            trainset[i].targets = trainset[i].targets[idx]
-            trainset[i].data = trainset[i].data[idx]
-            print("trainset[i] length:", len(trainset[i]))
-
-        for i in range(math.ceil(client_cnt*(1-proportion)), client_cnt):
-            print("b", math.ceil(client_cnt*(1-proportion)))
-            idx = [prob_choose(i, [1], [1]) for i in trainset[i].targets] # random sampling
-            trainset[i].targets = trainset[i].targets[idx]
-            trainset[i].data = trainset[i].data[idx]
-            print("trainset[i] length:", len(trainset[i]))
+        # for i in range(math.ceil(client_cnt*(1-proportion)), client_cnt):
+        #     print("b", math.ceil(client_cnt*(1-proportion)))
+        #     idx = [prob_choose(i, [1], [1]) for i in trainset[i].targets] # random sampling
+        #     trainset[i].targets = trainset[i].targets[idx]
+        #     trainset[i].data = trainset[i].data[idx]
+        #     print("trainset[i] length:", len(trainset[i]))
 
     print('=======================')
     trainloader = list()

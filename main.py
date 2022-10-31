@@ -43,7 +43,7 @@ parser.add_argument('--debug', type=bool, default=False, required=False)
 parser.add_argument('--proportion', type=float, default=0.8, required=False)
 parser.add_argument('--random_colors', type=str, default='1_per_group', required=False)
 parser.add_argument('--resize_to', type=int, default=32, required=False)
-parser.add_argument('--time_now', type=str, default='time:N/A', required=False)
+parser.add_argument('--time_now', type=str, default='', required=False)
 args = parser.parse_args()
 print(args.debug)
 n_epochs = args.n_epochs
@@ -62,6 +62,11 @@ resize_to = 32
 
 os.makedirs("runs", exist_ok=True)
 root = "runs/" + args.time_now
+args_dict = dict(vars(args))
+#for i, ii in args_dict.items():
+#     print(i, ii)
+#     root += (i + '_' + str(ii) + '_')
+root += ('_' + model +'_' + str(proportion))
 os.makedirs(root, exist_ok=True)
 
 
