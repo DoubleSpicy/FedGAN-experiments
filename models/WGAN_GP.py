@@ -32,18 +32,22 @@ class Generator(torch.nn.Module):
             nn.ReLU(True),
 
             # State (256x16x16)
-            nn.ConvTranspose2d(in_channels=256, out_channels=channels, kernel_size=4, stride=2, padding=1))
+            nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(num_features=128),
+            nn.ReLU(True),
+
+            nn.ConvTranspose2d(in_channels=128, out_channels=3, kernel_size=4, stride=2, padding=1),
+            nn.Tanh()
+        )
             # output of main module --> Image (Cx32x32)
 
-        self.output = nn.Tanh()
         self.b1 = 0.5
         self.b2 = 0.999
         self.learning_rate = 1e-4
         self.g_optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate, betas=(self.b1, self.b2))
 
     def forward(self, x):
-        x = self.main_module(x)
-        return self.output(x)
+        return self.main_module(x)
 
 class Discriminator(torch.nn.Module):
     def __init__(self, channels):
@@ -179,7 +183,7 @@ def train_1_epoch(generator: Generator,
     generator.g_optimizer.step()
     print(f'Generator iteration: {g_iter}/{n_epochs}, g_loss: {g_loss}')
     # Saving model and sampling images every 1000th generator iterations
-    if (g_iter-1) % 100 == 0:
+    if (g_iter) % 100 == 0:
         if not os.path.exists('{}/training_result_images/'.format(root)):
             os.makedirs('{}/training_result_images/'.format(root))
 

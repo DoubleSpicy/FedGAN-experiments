@@ -15,13 +15,8 @@ import numpy as np
 import os
 
 import numpy as np
-# import math
-# import sys
-# import random
 
 
-# import torch.nn as nn
-# import torch.nn.functional as F
 import torch
 from utils.loader import load_dataset, get_infinite_batches, load_model
 
@@ -30,7 +25,8 @@ global_timer = time.time()
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model', type=str, default='GAN', required=False)
+parser.add_argument('--model', type=str, default='WGAN-GP', required=False)
+parser.add_argument('--dataset', type=str, default='MNIST', required=False)
 parser.add_argument('--n_epochs', type=int, default=1000, required=False)
 parser.add_argument('--batch_size', type=int, default=64, required=False)
 parser.add_argument('--channels', type=int, default=3, required=False)
@@ -48,6 +44,7 @@ args = parser.parse_args()
 print(args.debug)
 n_epochs = args.n_epochs
 print("n_epochs", n_epochs)
+dataset_name = args.dataset
 batch_size = args.batch_size
 model = args.model
 channels = args.channels
@@ -75,7 +72,8 @@ print("is cuda available:", cuda)
 Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
 print("debug:", debug)
-trainloader = load_dataset(random_colors='1_per_group', 
+trainloader, img_shape = load_dataset(dataset_name=dataset_name,
+                random_colors='1_per_group', 
                 client_cnt=5, 
                 channels=3, 
                 batch_size=64,
@@ -103,7 +101,7 @@ class Server():
         if model == 'WGAN-GP':
             self.generator = Generator(channels)
         elif model == 'GAN':
-            self. generator = Generator(img_shape=(3, 32, 32))
+            self.generator = Generator(img_shape=img_shape)
         # return optimizer here
         self.g_iter = 1
 
@@ -184,7 +182,7 @@ class Client():
         if model == 'WGAN-GP':
             self.discriminator = Discriminator(channels)
         elif model == 'GAN':
-            self.discriminator = Discriminator(img_shape=(3, 32, 32))
+            self.discriminator = Discriminator(img_shape=img_shape)
         self.batches_done = 0
         self.id = cid
         self.cuda = cuda

@@ -59,7 +59,7 @@ class Discriminator(nn.Module):
 
       
 
-def train_1_epoch(generator: Generator, 
+async def train_1_epoch(generator: Generator, 
                     discriminator: Discriminator, 
                     cuda=True, n_critic=10, 
                     data=None, 
@@ -105,7 +105,7 @@ def train_1_epoch(generator: Generator,
 
     generator.optimizer.step()
     print(f'Generator iteration: {g_iter}/{n_epochs}, g_loss: {loss_G}')
-    if (g_iter-1) % 100 == 0:
+    if (g_iter) % 100 == 0:
         if not os.path.exists('{}/training_result_images/'.format(root)):
             os.makedirs('{}/training_result_images/'.format(root))
         z = Variable(Tensor(np.random.normal(0, 1, (images.shape[0], latent_dim)))).cuda(0)

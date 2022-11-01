@@ -19,7 +19,7 @@ import os
 
 def get_infinite_batches(data_loader):
     while True:
-        for i, (images, _) in enumerate(data_loader):
+        for i, (images, _ )in enumerate(data_loader):
             yield images
 
 def cal_split_lengths(length, n):
@@ -111,7 +111,8 @@ def prob_choose(target, digits: list, prob: list):
             return prob_true(0.9) and random.uniform(0, 1) <= prob[i]
     return False
 
-def load_dataset(random_colors='1_per_group', 
+def load_dataset(dataset_name,
+                random_colors='1_per_group', 
                 client_cnt=5, 
                 channels=3, 
                 batch_size=64,
@@ -131,62 +132,39 @@ def load_dataset(random_colors='1_per_group',
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, ), (0.5, )),
                 ]))
+        
 
         print(len(dataset))
         trainset = random_split(dataset, cal_split_lengths(len(dataset), client_cnt), generator=torch.Generator().manual_seed(42))
     elif random_colors == '1_per_group':
         trainset = []
         for i in range(client_cnt):
-            trainset.append(
-                datasets.MNIST(
-                "{}/data/mnist".format(root),
-                train=True,
-                download=True,
-                transform=transforms.Compose([
-                    transforms.Resize(32),
-                    transforms.Grayscale(channels),
-                    # CustomColorChange(colors=colors, all_random=False, debug=debug),
-                    transforms.ToTensor(),
-                    transforms.Normalize((0.5, ), (0.5, ))
-                ])
-            ))
+            assert dataset_name in ['MNIST', 'CelebA']
+            if dataset_name == 'MNIST':
+                dataset = datasets.MNIST("../data/mnist",
+                                        train=True,
+                                        download=True,
+                                        transform = transforms.Compose([
+                                        transforms.Resize(64),
+                                        transforms.Grayscale(channels),
+                                        # CustomColorChange(colors=colors, all_random=False, debug=debug),
+                                        transforms.ToTensor(),
+                                        transforms.Normalize((0.5, ), (0.5, ))
+                                        ]))
+                img_shape = [3, 64, 64]
+            elif dataset_name == 'CelebA':
+                dataset = datasets.CelebA(root="../data/",
+                                        download=True,
+                                        transform=transforms.Compose([transforms.Resize([64, 64]),
+                                                                        transforms.ToTensor(),
+                                                                        transforms.Normalize((0.5, ), (0.5, ))
+                                        ]))
+                img_shape = [3, 64, 64]
 
-        # for i in range(client_cnt):
-        #     idx = [prob_choose(i, [0, 1], [proportion, 1-proportion]) for i in trainset[i].targets] # random sampling
-        #     trainset[i].targets = trainset[i].targets[idx]
-        #     trainset[i].data = trainset[i].data[idx]
-        #     print("trainset[i] length:", len(trainset[i]))
-        # for i in range(client_cnt):
-        #     if(i % 2 == 0):
-        #         print(i, "zeroes")
-        #         idx = [prob_choose(i, [0], [1]) for i in trainset[i].targets] # random sampling
-        #         trainset[i].targets = trainset[i].targets[idx]
-        #         trainset[i].data = trainset[i].data[idx]
-        #         print("trainset[i] length:", len(trainset[i]))
-        #     else:
-        #         print(i, "ones")
-        #         idx = [prob_choose(i, [1], [1]) for i in trainset[i].targets] # random sampling
-        #         trainset[i].targets = trainset[i].targets[idx]
-        #         trainset[i].data = trainset[i].data[idx]
-        #         print("trainset[i] length:", len(trainset[i]))
-
-        # for i in range(math.ceil(client_cnt*(1-proportion))):
-        #     print("a")
-        #     idx = [prob_choose(i, [0], [1]) for i in trainset[i].targets] # random sampling
-        #     trainset[i].targets = trainset[i].targets[idx]
-        #     trainset[i].data = trainset[i].data[idx]
-        #     print("trainset[i] length:", len(trainset[i]))
-
-        # for i in range(math.ceil(client_cnt*(1-proportion)), client_cnt):
-        #     print("b", math.ceil(client_cnt*(1-proportion)))
-        #     idx = [prob_choose(i, [1], [1]) for i in trainset[i].targets] # random sampling
-        #     trainset[i].targets = trainset[i].targets[idx]
-        #     trainset[i].data = trainset[i].data[idx]
-        #     print("trainset[i] length:", len(trainset[i]))
-
+            trainset.append(dataset)
     print('=======================')
     trainloader = list()
     for i in range(0, client_cnt):
         trainloader.append(torch.utils.data.DataLoader(trainset[i], batch_size=batch_size,
                                                 shuffle=True, drop_last=True))
-    return trainloader
+    return trainloader, img_shape
