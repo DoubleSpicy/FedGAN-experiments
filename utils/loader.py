@@ -16,6 +16,7 @@ import math
 
 import os
 
+from utils.datasets import celeba
 
 def get_infinite_batches(data_loader):
     while True:
@@ -153,12 +154,26 @@ def load_dataset(dataset_name,
                                         ]))
                 img_shape = [3, 64, 64]
             elif dataset_name == 'CelebA':
-                dataset = datasets.CelebA(root="../data/",
-                                        download=True,
-                                        transform=transforms.Compose([transforms.Resize([64, 64]),
+                if (i < math.ceil(client_cnt*(1-proportion))):
+                    print("a", i)
+                    dataset = celeba(root_dir='../data/', 
+                                    attr_data='list_attr_celeba.txt', 
+                                    img_path='img_align_celeba', 
+                                    attr_filter=['+Mustache'],
+                                    transform=transforms.Compose([transforms.Resize([64, 64]),
                                                                         transforms.ToTensor(),
-                                                                        transforms.Normalize((0.5, ), (0.5, ))
-                                        ]))
+                                                                        transforms.Normalize((0.5, ), (0.5, ))])
+                                    )
+                else:
+                    print("b", i)
+                    dataset = celeba(root_dir='../data/', 
+                                    attr_data='list_attr_celeba.txt', 
+                                    img_path='img_align_celeba', 
+                                    attr_filter=['-Mustache'],
+                                    transform=transforms.Compose([transforms.Resize([64, 64]),
+                                                                        transforms.ToTensor(),
+                                                                        transforms.Normalize((0.5, ), (0.5, ))]))
+
                 img_shape = [3, 64, 64]
 
             trainset.append(dataset)

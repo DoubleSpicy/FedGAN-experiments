@@ -19,23 +19,25 @@ import numpy as np
 
 import torch
 from utils.loader import load_dataset, get_infinite_batches, load_model
+from utils.helper_functions import visualize_feature_map
+
 
 import time
 global_timer = time.time()
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model', type=str, default='WGAN-GP', required=False)
-parser.add_argument('--dataset', type=str, default='MNIST', required=False)
-parser.add_argument('--n_epochs', type=int, default=1000, required=False)
+parser.add_argument('--model', type=str, default='GAN', required=False)
+parser.add_argument('--dataset', type=str, default='CelebA', required=False)
+parser.add_argument('--n_epochs', type=int, default=2000, required=False)
 parser.add_argument('--batch_size', type=int, default=64, required=False)
 parser.add_argument('--channels', type=int, default=3, required=False)
 parser.add_argument('--n_critic', type=int, default=10, required=False)
 parser.add_argument('--client_cnt', type=int, default=5, required=False)
-parser.add_argument('--share_D', type=bool, default=False, required=False)
-parser.add_argument('--load_G', type=bool, default=False, required=False)
-parser.add_argument('--load_D', type=bool, default=False, required=False)
-parser.add_argument('--debug', type=bool, default=False, required=False)
+parser.add_argument('--share_D', type=str, default='False', required=False)
+parser.add_argument('--load_G', type=str, default='False', required=False)
+parser.add_argument('--load_D', type=str, default='False', required=False)
+parser.add_argument('--debug', type=str, default='True', required=False)
 parser.add_argument('--proportion', type=float, default=0.8, required=False)
 parser.add_argument('--random_colors', type=str, default='1_per_group', required=False)
 parser.add_argument('--resize_to', type=int, default=32, required=False)
@@ -50,9 +52,10 @@ model = args.model
 channels = args.channels
 n_critic = args.n_critic
 client_cnt = args.client_cnt
-share_D = args.share_D
-debug = args.debug # global debug variable
-load_G, load_D = args.load_G, args.load_D
+share_D = True if args.share_D == 'True' else False
+debug = True if args.debug == 'True' else False
+load_G = True if args.load_G == 'True' else False
+load_D  = True if args.load_D == 'True' else False 
 proportion = args.proportion
 random_colors = args.random_colors
 resize_to = 32
@@ -60,10 +63,11 @@ resize_to = 32
 os.makedirs("runs", exist_ok=True)
 root = "runs/" + args.time_now
 args_dict = dict(vars(args))
-#for i, ii in args_dict.items():
-#     print(i, ii)
+for i, ii in args_dict.items():
+    print(i, ii)
 #     root += (i + '_' + str(ii) + '_')
-root += ('_' + model +'_' + str(proportion))
+root += ('_' + model +'_' + str(proportion) + '_' + str(share_D) + '_' + dataset_name)
+# print(share_D)
 os.makedirs(root, exist_ok=True)
 
 
@@ -74,9 +78,9 @@ Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 print("debug:", debug)
 trainloader, img_shape = load_dataset(dataset_name=dataset_name,
                 random_colors='1_per_group', 
-                client_cnt=5, 
-                channels=3, 
-                batch_size=64,
+                client_cnt=client_cnt, 
+                channels=channels, 
+                batch_size=batch_size,
                 colors = None, 
                 debug=debug,
                 proportion=proportion,
@@ -212,5 +216,7 @@ server = Server(client_list)
 server.train()
 # server.val()
 
+visualize_feature_map(server.clients[0].discriminator.model)
+# visualize_feature_map(server.generator.model)
 print("total time taken:", time.time()-global_timer)
 print("done")

@@ -59,7 +59,7 @@ class Discriminator(nn.Module):
 
       
 
-async def train_1_epoch(generator: Generator, 
+def train_1_epoch(generator: Generator, 
                     discriminator: Discriminator, 
                     cuda=True, n_critic=10, 
                     data=None, 

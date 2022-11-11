@@ -15,7 +15,7 @@ class Generator(torch.nn.Module):
         # Filters [1024, 512, 256]
         # Input_dim = 100
         # Output_dim = C (number of channels)
-        self.main_module = nn.Sequential(
+        self.model = nn.Sequential(
             # Z latent vector 100
             nn.ConvTranspose2d(in_channels=100, out_channels=1024, kernel_size=4, stride=1, padding=0),
             nn.BatchNorm2d(num_features=1024),
@@ -47,7 +47,7 @@ class Generator(torch.nn.Module):
         self.g_optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate, betas=(self.b1, self.b2))
 
     def forward(self, x):
-        return self.main_module(x)
+        return self.model(x)
 
 class Discriminator(torch.nn.Module):
     def __init__(self, channels):
@@ -55,7 +55,7 @@ class Discriminator(torch.nn.Module):
         # Filters [256, 512, 1024]
         # Input_dim = channels (Cx64x64)
         # Output_dim = 1
-        self.main_module = nn.Sequential(
+        self.model = nn.Sequential(
             # Omitting batch normalization in critic because our new penalized training objective (WGAN with gradient penalty) is no longer valid
             # in this setting, since we penalize the norm of the critic's gradient with respect to each input independently and not the enitre batch.
             # There is not good & fast implementation of layer normalization --> using per instance normalization nn.InstanceNorm2d()
@@ -86,12 +86,12 @@ class Discriminator(torch.nn.Module):
         self.d_optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate, betas=(self.b1, self.b2))
 
     def forward(self, x):
-        x = self.main_module(x)
+        x = self.model(x)
         return self.output(x)
 
     def feature_extraction(self, x):
         # Use discriminator for feature extraction then flatten to vector of 16384
-        x = self.main_module(x)
+        x = self.model(x)
         return x.view(-1, 1024*4*4)
 
 
