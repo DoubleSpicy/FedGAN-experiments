@@ -16,7 +16,7 @@ import math
 
 import os
 
-from utils.datasets import celeba
+from utils.datasets import celeba, TinyImageNet
 
 def get_infinite_batches(data_loader):
     while True:
@@ -140,7 +140,7 @@ def load_dataset(dataset_name,
     elif random_colors == '1_per_group':
         trainset = []
         for i in range(client_cnt):
-            assert dataset_name in ['MNIST', 'CelebA']
+            assert dataset_name in ['MNIST', 'CelebA', 'TinyImageNet']
             if dataset_name == 'MNIST':
                 dataset = datasets.MNIST("../data/mnist",
                                         train=True,
@@ -173,9 +173,15 @@ def load_dataset(dataset_name,
                                     transform=transforms.Compose([transforms.Resize([64, 64]),
                                                                         transforms.ToTensor(),
                                                                         transforms.Normalize((0.5, ), (0.5, ))]))
-
-                img_shape = [3, 64, 64]
-
+            elif dataset_name == 'TinyImageNet':
+                dataset = TinyImageNet(root_dir='../data/tiny-imagenet-200/', 
+                        attr_data='classes.csv', 
+                        img_path='train',
+                        transform=transforms.Compose([transforms.Resize([64, 64]),
+                                                                        transforms.ToTensor(),
+                                                                        transforms.Normalize((0.5, ), (0.5, ))]))
+            img_shape = [3, 64, 64]
+            
             trainset.append(dataset)
     print('=======================')
     trainloader = list()
