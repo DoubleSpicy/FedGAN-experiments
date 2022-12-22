@@ -28,7 +28,7 @@ global_timer = time.time()
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model', type=str, default='GAN', required=False)
-parser.add_argument('--dataset', type=str, default='TinyImageNet', required=False)
+parser.add_argument('--dataset', type=str, default='CelebA', required=False)
 parser.add_argument('--n_epochs', type=int, default=2000, required=False)
 parser.add_argument('--batch_size', type=int, default=64, required=False)
 parser.add_argument('--channels', type=int, default=3, required=False)

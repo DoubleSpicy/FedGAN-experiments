@@ -16,7 +16,7 @@ import math
 
 import os
 
-from utils.datasets import celeba, TinyImageNet
+from utils.datasets import celeba, TinyImageNet, equalize
 
 def get_infinite_batches(data_loader):
     while True:
@@ -159,7 +159,7 @@ def load_dataset(dataset_name,
                     dataset = celeba(root_dir='../data/', 
                                     attr_data='list_attr_celeba.txt', 
                                     img_path='img_align_celeba', 
-                                    attr_filter=['+Mustache'],
+                                    attr_filter=['+Eyeglasses'],
                                     transform=transforms.Compose([transforms.Resize([64, 64]),
                                                                         transforms.ToTensor(),
                                                                         transforms.Normalize((0.5, ), (0.5, ))])
@@ -169,19 +169,33 @@ def load_dataset(dataset_name,
                     dataset = celeba(root_dir='../data/', 
                                     attr_data='list_attr_celeba.txt', 
                                     img_path='img_align_celeba', 
-                                    attr_filter=['-Mustache'],
+                                    attr_filter=['-Eyeglasses'],
                                     transform=transforms.Compose([transforms.Resize([64, 64]),
                                                                         transforms.ToTensor(),
                                                                         transforms.Normalize((0.5, ), (0.5, ))]))
+                    if i > 0:
+                        equalize(trainset[0], dataset)
             elif dataset_name == 'TinyImageNet':
-                dataset = TinyImageNet(root_dir='../data/tiny-imagenet-200/', 
-                        attr_data='classes.csv', 
-                        img_path='train',
-                        transform=transforms.Compose([transforms.Resize([64, 64]),
-                                                                        transforms.ToTensor(),
-                                                                        transforms.Normalize((0.5, ), (0.5, ))]))
+                if (i < math.ceil(client_cnt*(1-proportion))):
+                    dataset = TinyImageNet(root_dir='../data/tiny-imagenet-200/', 
+                            attr_data='classes.csv', 
+                            img_path='train',
+                            attr_filter=['+ox'],
+                            transform=transforms.Compose([transforms.Resize([64, 64]),
+                                                                            transforms.ToTensor(),
+                                                                            transforms.Normalize((0.5, ), (0.5, ))]))
+                    
+                else:
+                    dataset = TinyImageNet(root_dir='../data/tiny-imagenet-200/', 
+                            attr_data='classes.csv', 
+                            img_path='train',
+                            attr_filter=['+mushroom'],
+                            transform=transforms.Compose([transforms.Resize([64, 64]),
+                                                                            transforms.ToTensor(),
+                                                                            transforms.Normalize((0.5, ), (0.5, ))]))
+                print(dataset.attribute_data)
             img_shape = [3, 64, 64]
-            
+            print(len(dataset))
             trainset.append(dataset)
     print('=======================')
     trainloader = list()

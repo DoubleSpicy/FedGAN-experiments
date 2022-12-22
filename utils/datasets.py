@@ -11,6 +11,7 @@ from PIL import Image
 import random
 import skimage.io as io
 
+
 class celeba(Dataset):
     def __init__(self, root_dir: str, img_path: str, attr_data, attr_filter: list = None, transform: transforms = None):
         self.root_dir = os.path.join(root_dir, __class__.__name__)
@@ -59,6 +60,7 @@ class celeba(Dataset):
         # print(remove_index_list)
         self.attribute_data = self.attribute_data.drop(remove_index_list)
 
+
     def _load_csv(self, path, skip_first_row=False):
         rows_to_skip = []
         if skip_first_row:
@@ -67,8 +69,24 @@ class celeba(Dataset):
         df.columns = ["filename"] + df.columns.tolist()[:-1]
         return df
 
-# if __name__ == '__main__':
-    # dataset = celeba(root_dir='../data/', attr_data='list_attr_celeba.txt', img_path='img_align_celeba', attr_filter=['5_o_Clock_Shadow', '-Arched_Eyebrows'])
+
+def equalize(a: celeba, b: celeba):
+    # input 2 datasets, equalize their size to min of the them.
+    size = min(len(a.attribute_data), len(b.attribute_data))
+    def drop_rows_randomly(dataset: celeba):
+        to_remove = len(dataset.attribute_data) - size
+        drop_indices = np.random.choice(dataset.attribute_data.index, to_remove, replace=False)
+        dataset.attribute_data = dataset.attribute_data.drop(drop_indices)
+    drop_rows_randomly(a)
+    drop_rows_randomly(b)
+
+if __name__ == '__main__':
+    dataset = celeba(root_dir='../data/', attr_data='list_attr_celeba.txt', img_path='img_align_celeba', attr_filter=['5_o_Clock_Shadow', '-Arched_Eyebrows'])
+    print(dataset.attribute_data)
+    print(len(dataset.attribute_data[dataset.attribute_data['Eyeglasses'] == 1]))
+    print(len(dataset.attribute_data[dataset.attribute_data['Eyeglasses'] == -1]))
+    print(len(dataset.attribute_data[dataset.attribute_data['Mustache'] == 1]))
+    print(len(dataset.attribute_data[dataset.attribute_data['Mustache'] == -1]))
     # img = dataset.__getitem__(index=0)
     # print(dataset.attribute_data)
     # img.save('test.jpg')
@@ -113,8 +131,17 @@ class TinyImageNet(Dataset):
             return
         remove_index_list = []
         positive_list, negative_list = self._process_tags()
-        remove_index_list += self.attribute_data[~self.attribute_data['tags'].str.contains('|'.join(positive_list), na=False)].index.to_list()
-        remove_index_list += self.attribute_data[self.attribute_data['tags'].str.contains('|'.join(negative_list), na=False)].index.to_list()
+        # print(positive_list, negative_list)
+        for i in range(self.attribute_data.shape[0]):
+            splitted = set(self.attribute_data.iloc[i]['tags'].split(', '))
+            if(len(splitted.intersection(positive_list)) == 0 or len(splitted.intersection(negative_list)) > 0):
+                remove_index_list.append(i)
+        # if len(positive_list) > 0:
+        #     remove_index_list += self.attribute_data[~self.attribute_data['tags'].str.contains('|'.join(positive_list), na=False)].index.to_list()
+        # print('len:', len(remove_index_list))
+        # if len(negative_list) > 0:
+        #     remove_index_list += self.attribute_data[self.attribute_data['tags'].str.contains('|'.join(negative_list), na=False)].index.to_list()
+        # print('len:', len(remove_index_list))
         self.attribute_data = self.attribute_data.drop(remove_index_list)
         print(self.attribute_data['tags'])
 
@@ -152,17 +179,18 @@ class TinyImageNet(Dataset):
 
     def __len__(self):
         return len(self.attribute_data.index)*500
-if __name__ == '__main__':
-    test = TinyImageNet(root_dir='../data/tiny-imagenet-200/', 
-                        attr_data='classes.csv', 
-                        img_path='train',
-                        transform=transforms.Compose([
-                                                                        transforms.ToTensor(),
-                                                                        transforms.Normalize((0.5, ), (0.5, ))]))
-    print(test.attribute_data)
-    img = test.__getitem__('../data/tiny-imagenet-200/train/n03930313/images/n03930313_473.JPEG')
-    print(img)
-    print(img[0].shape)
+# if __name__ == '__main__':
+#     test = TinyImageNet(root_dir='../data/tiny-imagenet-200/', 
+#                         attr_data='classes.csv', 
+#                         img_path='train',
+#                         attr_filter=['+ox', '+mushroom'],
+#                         transform=transforms.Compose([
+#                                                                         transforms.ToTensor(),
+#                                                                         transforms.Normalize((0.5, ), (0.5, ))]))
+#     print(test.attribute_data)
+    # img = test.__getitem__('../data/tiny-imagenet-200/train/n03930313/images/n03930313_473.JPEG')
+    # print(img)
+    # print(img[0].shape)
     # temp = test.attribute_data
     # file = open('../data/tiny-imagenet-200/available_classes.txt', 'r')
     # lines = file.readlines()
@@ -173,3 +201,5 @@ if __name__ == '__main__':
     # temp = temp.drop(temp[~temp['id'].str.contains('|'.join(available_classes), na=False)].index.to_list())
     # print(temp)
     # temp.to_csv(path_or_buf='../data/tiny-imagenet-200/classes.csv')
+
+    # test2 = celeba()
