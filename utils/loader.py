@@ -55,9 +55,10 @@ def load_model(filename, model):
 
 
 def save_model(generator, discriminator, id, root):
-    torch.save(generator.state_dict(), '{}/generator_pid_{}.pkl'.format(root, id))
-    torch.save(discriminator.state_dict(), '{}/discriminator_pid_{}.pkl'.format(root, id))
-    print('Models save to {}/generator_pid_{}.pkl & {}/discriminator_pid_{}.pkl '.format(root, id, root, id))
+    model_path = os.path.join(os.getcwd(), root)
+    torch.save(generator.state_dict(), '{}/generator_pid_{}.pkl'.format(model_path, id))
+    torch.save(discriminator.state_dict(), '{}/discriminator_pid_{}.pkl'.format(model_path, id))
+    print('Models save to {}/generator_pid_{}.pkl & {}/discriminator_pid_{}.pkl '.format(model_path, id, model_path, id))
 
 class CustomColorChange():
     ''' Change background color
@@ -119,7 +120,7 @@ def load_dataset(dataset_name,
                 batch_size=64,
                 colors:tuple = None, 
                 debug=False,
-                proportion=0.2,
+                group='a',
                 root=''):
     if random_colors == 'all_random':
         dataset = datasets.MNIST(
@@ -135,7 +136,7 @@ def load_dataset(dataset_name,
                 ]))
         
 
-        print(len(dataset))
+        # print(len(dataset))
         trainset = random_split(dataset, cal_split_lengths(len(dataset), client_cnt), generator=torch.Generator().manual_seed(42))
     elif random_colors == '1_per_group':
         trainset = []
@@ -152,10 +153,15 @@ def load_dataset(dataset_name,
                                         transforms.ToTensor(),
                                         transforms.Normalize((0.5, ), (0.5, ))
                                         ]))
+                if group == 'a':
+                    indices = dataset.targets == 0 # if you want to keep images with the label 5
+                else:
+                    indices = dataset.targets == 1 # if you want to keep images with the label 5
+                dataset.data, dataset.targets = dataset.data[indices], dataset.targets[indices]
                 img_shape = [3, 64, 64]
             elif dataset_name == 'CelebA':
-                if (i < math.ceil(client_cnt*(1-proportion))):
-                    print("a", i)
+                if (group == 'a'):
+                    # print("a", i)
                     dataset = celeba(root_dir='../data/', 
                                     attr_data='list_attr_celeba.txt', 
                                     img_path='img_align_celeba', 
@@ -165,7 +171,7 @@ def load_dataset(dataset_name,
                                                                         transforms.Normalize((0.5, ), (0.5, ))])
                                     )
                 else:
-                    print("b", i)
+                    # print("b", i)
                     dataset = celeba(root_dir='../data/', 
                                     attr_data='list_attr_celeba.txt', 
                                     img_path='img_align_celeba', 
@@ -176,7 +182,7 @@ def load_dataset(dataset_name,
                     if i > 0:
                         equalize(trainset[0], dataset)
             elif dataset_name == 'TinyImageNet':
-                if (i < math.ceil(client_cnt*(1-proportion))):
+                if (group == 'a'):
                     dataset = TinyImageNet(root_dir='../data/tiny-imagenet-200/', 
                             attr_data='classes.csv', 
                             img_path='train',
@@ -193,11 +199,11 @@ def load_dataset(dataset_name,
                             transform=transforms.Compose([transforms.Resize([64, 64]),
                                                                             transforms.ToTensor(),
                                                                             transforms.Normalize((0.5, ), (0.5, ))]))
-                print(dataset.attribute_data)
+                # print(dataset.attribute_data)
             img_shape = [3, 64, 64]
-            print(len(dataset))
+            # print(len(dataset))
             trainset.append(dataset)
-    print('=======================')
+    # print('=======================')
     trainloader = list()
     for i in range(0, client_cnt):
         trainloader.append(torch.utils.data.DataLoader(trainset[i], batch_size=batch_size,

@@ -105,7 +105,8 @@ def train_1_epoch(generator: Generator,
                     lambda_term=10,
                     g_iter=-1,
                     id=-1,
-                    root=''):
+                    root='',
+                    size=0):
     t_begin = t.time()
 
     
@@ -113,7 +114,7 @@ def train_1_epoch(generator: Generator,
     one = torch.tensor(1, dtype=torch.float)
     mone = one * -1
     if cuda:
-        cuda_index=0
+        cuda_index=id % size
         one = one.cuda(cuda_index)
         mone = mone.cuda(cuda_index)
 
@@ -132,9 +133,9 @@ def train_1_epoch(generator: Generator,
         if (images.size()[0] != batch_size):
             continue
 
-        z = torch.rand((batch_size, 100, 1, 1))
+        z = torch.rand((batch_size, 100, 1, 1)).to(cuda_index)
 
-        images, z = get_torch_variable(images), get_torch_variable(z)
+        images, z = get_torch_variable(images, True, cuda_index), get_torch_variable(z, True, cuda_index)
 
         # Train discriminator
         # WGAN - Training discriminator more iterations than generator
@@ -144,9 +145,9 @@ def train_1_epoch(generator: Generator,
         d_loss_real.backward(mone)
 
         # Train with fake images
-        z = get_torch_variable(torch.randn(batch_size, 100, 1, 1))
+        z = get_torch_variable(torch.randn(batch_size, 100, 1, 1)).to(cuda_index)
 
-        fake_images = generator(z)
+        fake_images = generator(z).to(cuda_index)
         d_loss_fake = discriminator(fake_images)
         d_loss_fake = d_loss_fake.mean()
         d_loss_fake.backward(one)
@@ -175,7 +176,7 @@ def train_1_epoch(generator: Generator,
     # train generator
     # compute loss with fake images
     z = get_torch_variable(torch.randn(batch_size, 100, 1, 1))
-    fake_images = generator(z)
+    fake_images = generator(z).to(cuda_index)
     g_loss = discriminator(fake_images)
     g_loss = g_loss.mean()
     g_loss.backward(mone)
@@ -189,7 +190,7 @@ def train_1_epoch(generator: Generator,
 
         # Denormalize images and save them in grid 8x8
         z = get_torch_variable(torch.randn(800, 100, 1, 1))
-        samples = generator(z)
+        samples = generator(z).to(cuda_index)
         samples = samples.mul(0.5).add(0.5)
         samples = samples.data.cpu()[:64]
         grid = utils.make_grid(samples)
