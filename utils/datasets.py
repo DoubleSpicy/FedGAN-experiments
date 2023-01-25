@@ -10,12 +10,14 @@ import numpy as np
 from PIL import Image
 import random
 import skimage.io as io
-
+import torch.distributed as dist
+import math
 
 class celeba(Dataset):
-    def __init__(self, root_dir: str, img_path: str, attr_data, attr_filter: list = None, transform: transforms = None):
+    def __init__(self, root_dir: str, img_path: str, attr_data, attr_filter: list = None, transform: transforms = None, proportion: int = 0):
         self.root_dir = os.path.join(root_dir, __class__.__name__)
         self.img_path = os.path.join(self.root_dir, img_path)
+        self.proportion = proportion
         print(self.root_dir, self.img_path)
         assert type(attr_data) in [str, pd.DataFrame]
         if type(attr_data) == str:
@@ -51,14 +53,32 @@ class celeba(Dataset):
         return positive_list, negative_list
 
     def _filter_attribute_tag(self):
+        drop_list = rotary_reduce(self.attribute_data.index.tolist())
+        self.attribute_data = self.attribute_data.drop(drop_list)
         remove_index_list = []
         positive_list, negative_list = self._process_tags()
-        for tags in positive_list:
-            remove_index_list += self.attribute_data[self.attribute_data[tags] != 1].index.to_list()
-        for tags in negative_list:
-            remove_index_list += self.attribute_data[self.attribute_data[tags] != -1].index.to_list()
-        # print(remove_index_list)
-        self.attribute_data = self.attribute_data.drop(remove_index_list)
+        if self.proportion == 0:
+            for tags in positive_list:
+                remove_index_list += self.attribute_data[self.attribute_data[tags] != 1].index.to_list()
+            for tags in negative_list:
+                remove_index_list += self.attribute_data[self.attribute_data[tags] != -1].index.to_list()
+        else:
+            def prob_true(limit):
+                return random.uniform(0, 1) <= limit
+            # proportion = P(opposite class)
+
+            if len(positive_list) == 1:
+                tags = positive_list[0]
+                negativeCnt = len(self.attribute_data[self.attribute_data[tags] == -1])
+                positiveCnt = len(self.attribute_data) - negativeCnt
+                # dropCnt = math.floor(negativeCnt - self.proportion * (positiveCnt))
+                dropCnt = math.floor((self.proportion * (positiveCnt + negativeCnt) - negativeCnt) / (self.proportion - 1))
+                remove_index_list = np.random.choice(self.attribute_data[self.attribute_data[tags] == -1].index, dropCnt, replace=False)
+                self.attribute_data = self.attribute_data.drop(remove_index_list)
+
+        print(self.attribute_data[self.attribute_data['Eyeglasses'] == -1])
+        print(self.attribute_data[self.attribute_data['Eyeglasses'] == 1])
+        print(len(self.attribute_data))
 
 
     def _load_csv(self, path, skip_first_row=False):
@@ -69,6 +89,17 @@ class celeba(Dataset):
         df.columns = ["filename"] + df.columns.tolist()[:-1]
         return df
 
+def rotary_reduce(target_list: list):
+    drop_list = []
+    pid, size = dist.get_rank(), dist.get_world_size()
+    cnt = 0
+    for i in target_list:
+        if cnt != pid:
+            drop_list.append(i)
+            cnt += 1
+        else:
+            cnt -= size
+    return drop_list
 
 def equalize(a: celeba, b: celeba):
     # input 2 datasets, equalize their size to min of the them.
@@ -79,6 +110,15 @@ def equalize(a: celeba, b: celeba):
         dataset.attribute_data = dataset.attribute_data.drop(drop_indices)
     drop_rows_randomly(a)
     drop_rows_randomly(b)
+
+def equalizePD(a: pd.DataFrame, tag: str, proportion: float):
+    positiveCnt, negativeCnt = len(a[a[tag] == 1]), len(a[a[tag] == -1])
+    to_remove = math.floor(negativeCnt - proportion * positiveCnt)
+    # (+veCnt / (-veCnt - x)) = proportion.
+    # +veCnt / proportion + -veCnt
+    drop_indices = np.random.choice(a[a[tag] == -1].index, to_remove, replace=False)
+    a = a.drop(drop_indices)
+    return a
 
 if __name__ == '__main__':
     dataset = celeba(root_dir='../data/', attr_data='list_attr_celeba.txt', img_path='img_align_celeba', attr_filter=['5_o_Clock_Shadow', '-Arched_Eyebrows'])
@@ -143,6 +183,9 @@ class TinyImageNet(Dataset):
         #     remove_index_list += self.attribute_data[self.attribute_data['tags'].str.contains('|'.join(negative_list), na=False)].index.to_list()
         # print('len:', len(remove_index_list))
         self.attribute_data = self.attribute_data.drop(remove_index_list)
+        drop_list = rotary_reduce(self.attribute_data.index.tolist())
+        self.attribute_data = self.attribute_data.drop(drop_list)
+        print(self.attribute_data)
         print(self.attribute_data['tags'])
 
     def __getitem__(self, index):
@@ -203,3 +246,4 @@ class TinyImageNet(Dataset):
     # temp.to_csv(path_or_buf='../data/tiny-imagenet-200/classes.csv')
 
     # test2 = celeba()
+

@@ -98,7 +98,7 @@ class Discriminator(torch.nn.Module):
         return x.view(-1, 1024*4*4)
 
 
-def update_D(generator: Generator, 
+def train_1_epoch_D(generator: Generator, 
                     discriminator: Discriminator, 
                     cuda=True, n_critic=10, 
                     data=None, 
@@ -169,7 +169,7 @@ def update_D(generator: Generator,
         Wasserstein_D = d_loss_real - d_loss_fake
         discriminator.d_optimizer.step()
         if debug:
-            print(f'  Device:{id%size} | ID:{id} | g_iter:{g_iter} | d_iter: {d_iter+1}/{n_critic} | loss_fake: {d_loss_fake} | loss_real: {d_loss_real}')
+            print(f'  Discriminator iteration: {d_iter+1}/{n_critic}, loss_fake: {d_loss_fake}, loss_real: {d_loss_real}')
 
 
 
@@ -178,7 +178,7 @@ def update_D(generator: Generator,
     # Save the trained parameters
     save_model(generator, discriminator, id, root)
 
-def update(generator: Generator, 
+def train_1_epoch(generator: Generator, 
                     discriminator: Discriminator, 
                     cuda=True, n_critic=10, 
                     data=None, 
@@ -189,8 +189,7 @@ def update(generator: Generator,
                     g_iter=-1,
                     id=-1,
                     root='',
-                    size=0,
-                    D_only=False):
+                    size=0):
     t_begin = t.time()
 
     
@@ -250,43 +249,41 @@ def update(generator: Generator,
         Wasserstein_D = d_loss_real - d_loss_fake
         discriminator.d_optimizer.step()
         if debug:
-            print(f'  Device:{id%size} | ID:{id} | g_iter:{g_iter} | d_iter: {d_iter+1}/{n_critic} | loss_fake: {d_loss_fake} | loss_real: {d_loss_real}')
-            # print(f'  Discriminator iteration: {d_iter+1}/{n_critic}, loss_fake: {d_loss_fake}, loss_real: {d_loss_real}')
+            print(f'  Discriminator iteration: {d_iter+1}/{n_critic}, loss_fake: {d_loss_fake}, loss_real: {d_loss_real}')
 
     # Generator update
-    if not D_only:
-        for p in discriminator.parameters():
-            p.requires_grad = False  # to avoid computation
+    for p in discriminator.parameters():
+        p.requires_grad = False  # to avoid computation
 
-        generator.zero_grad()
-        # train generator
-        # compute loss with fake images
-        z = get_torch_variable(torch.randn(batch_size, 100, 1, 1), True, cuda_index)
-        fake_images = generator(z).to(cuda_index)
-        g_loss = discriminator(fake_images)
-        g_loss = g_loss.mean()
-        g_loss.backward(mone)
-        g_cost = -g_loss
-        generator.g_optimizer.step()
-        print(f'Device:{id%size} | ID:{id} | g_iter:{g_iter}/{n_epochs} | g_loss: {g_loss}')
-        # Saving model and sampling images every 1000th generator iterations
-        if (g_iter) % 100 == 0:
-            if not os.path.exists('{}/training_result_images/'.format(root)):
-                os.makedirs('{}/training_result_images/'.format(root))
+    generator.zero_grad()
+    # train generator
+    # compute loss with fake images
+    z = get_torch_variable(torch.randn(batch_size, 100, 1, 1), True, cuda_index)
+    fake_images = generator(z).to(cuda_index)
+    g_loss = discriminator(fake_images)
+    g_loss = g_loss.mean()
+    g_loss.backward(mone)
+    g_cost = -g_loss
+    generator.g_optimizer.step()
+    print(f'Device:{dist.get_rank()}: | ID:{id} | Generator iteration: {g_iter}/{n_epochs}, g_loss: {g_loss}')
+    # Saving model and sampling images every 1000th generator iterations
+    if (g_iter) % 100 == 0:
+        if not os.path.exists('{}/training_result_images/'.format(root)):
+            os.makedirs('{}/training_result_images/'.format(root))
 
-            # Denormalize images and save them in grid 8x8
-            z = get_torch_variable(torch.randn(800, 100, 1, 1), True, cuda_index)
-            samples = generator(z).to(cuda_index)
-            samples = samples.mul(0.5).add(0.5)
-            samples = samples.data.cpu()[:64]
-            grid = utils.make_grid(samples)
-            utils.save_image(grid, '{}/training_result_images/img_generatori_iter_{}_pid_{}.png'.format(root, str(g_iter).zfill(3), id))
+        # Denormalize images and save them in grid 8x8
+        z = get_torch_variable(torch.randn(800, 100, 1, 1), True, cuda_index)
+        samples = generator(z).to(cuda_index)
+        samples = samples.mul(0.5).add(0.5)
+        samples = samples.data.cpu()[:64]
+        grid = utils.make_grid(samples)
+        utils.save_image(grid, '{}/training_result_images/img_generatori_iter_{}_pid_{}.png'.format(root, str(g_iter).zfill(3), id))
 
-            # Testing
-            time = t.time() - t_begin
-            #print("Real Inception score: {}".format(inception_score))
-            print(f"Device:{dist.get_rank()}: | ID:{id} | Generator iter: {g_iter}")
-            print("Time {}".format(time))
+        # Testing
+        time = t.time() - t_begin
+        #print("Real Inception score: {}".format(inception_score))
+        print(f"Device:{dist.get_rank()}: | ID:{id} | Generator iter: {g_iter}")
+        print("Time {}".format(time))
 
 
 
@@ -342,8 +339,8 @@ def save_sample(generator: Generator, cuda_index: int, root: str, g_iter: int):
     # Denormalize images and save them in grid 8x8
     z = get_torch_variable(torch.randn(800, 100, 1, 1), True, cuda_index)
     samples = generator(z).to(cuda_index)
-    # print(samples)
-    samples = samples.mul(0.5).add(0.5)
-    samples = samples.data.cpu()[:64]
-    grid = utils.make_grid(samples)
-    utils.save_image(grid, '{}/training_result_images/afterAvg_iter_{}_pid_{}.png'.format(root, str(g_iter).zfill(3), dist.get_rank()))
+    print(samples)
+    # samples = samples.mul(0.5).add(0.5)
+    # samples = samples.data.cpu()[:64]
+    # grid = utils.make_grid(samples)
+    # utils.save_image(grid, '{}/training_result_images/afterAvg_iter_{}_pid_{}.png'.format(root, str(g_iter).zfill(3), id))

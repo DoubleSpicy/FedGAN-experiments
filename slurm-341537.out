@@ -1,0 +1,61 @@
+Process Process-1:
+Traceback (most recent call last):
+  File "/usr/lib/python3.6/multiprocessing/process.py", line 258, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.6/multiprocessing/process.py", line 93, in run
+    self._target(*self._args, **self._kwargs)
+  File "/research/dept8/fyp22/far2202/DDP4/DDPtraining.py", line 19, in init_process
+    fn(rank, size)
+  File "/research/dept8/fyp22/far2202/DDP4/DDPtraining.py", line 94, in run
+    batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size)
+  File "/research/dept8/fyp22/far2202/DDP4/models/WGAN_GP.py", line 272, in train_1_epoch
+    os.makedirs('{}/training_result_images/'.format(root))
+  File "/usr/lib/python3.6/os.py", line 220, in makedirs
+    mkdir(name, mode)
+FileExistsError: [Errno 17] File exists: 'runs/_WGAN-GP_3.0_True_CelebA/training_result_images/'
+Process Process-2:
+Traceback (most recent call last):
+  File "/usr/lib/python3.6/multiprocessing/process.py", line 258, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.6/multiprocessing/process.py", line 93, in run
+    self._target(*self._args, **self._kwargs)
+  File "/research/dept8/fyp22/far2202/DDP4/DDPtraining.py", line 19, in init_process
+    fn(rank, size)
+  File "/research/dept8/fyp22/far2202/DDP4/DDPtraining.py", line 95, in run
+    average_params(model_G, 'G')
+  File "/research/dept8/fyp22/far2202/DDP4/DDPtraining.py", line 103, in average_params
+    dist.all_reduce(param.data, op=dist.ReduceOp.SUM, async_op=False)
+  File "/usr/local/lib/python3.6/dist-packages/torch/distributed/distributed_c10d.py", line 905, in all_reduce
+    work.wait()
+RuntimeError: [/pytorch/third_party/gloo/gloo/transport/tcp/pair.cc:575] Connection closed by peer [127.0.1.1]:19858
+Process Process-4:
+Traceback (most recent call last):
+  File "/usr/lib/python3.6/multiprocessing/process.py", line 258, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.6/multiprocessing/process.py", line 93, in run
+    self._target(*self._args, **self._kwargs)
+  File "/research/dept8/fyp22/far2202/DDP4/DDPtraining.py", line 19, in init_process
+    fn(rank, size)
+  File "/research/dept8/fyp22/far2202/DDP4/DDPtraining.py", line 95, in run
+    average_params(model_G, 'G')
+  File "/research/dept8/fyp22/far2202/DDP4/DDPtraining.py", line 103, in average_params
+    dist.all_reduce(param.data, op=dist.ReduceOp.SUM, async_op=False)
+  File "/usr/local/lib/python3.6/dist-packages/torch/distributed/distributed_c10d.py", line 905, in all_reduce
+    work.wait()
+RuntimeError: [/pytorch/third_party/gloo/gloo/transport/tcp/pair.cc:575] Connection closed by peer [127.0.1.1]:21394
+Process Process-3:
+Traceback (most recent call last):
+  File "/usr/lib/python3.6/multiprocessing/process.py", line 258, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.6/multiprocessing/process.py", line 93, in run
+    self._target(*self._args, **self._kwargs)
+  File "/research/dept8/fyp22/far2202/DDP4/DDPtraining.py", line 19, in init_process
+    fn(rank, size)
+  File "/research/dept8/fyp22/far2202/DDP4/DDPtraining.py", line 95, in run
+    average_params(model_G, 'G')
+  File "/research/dept8/fyp22/far2202/DDP4/DDPtraining.py", line 103, in average_params
+    dist.all_reduce(param.data, op=dist.ReduceOp.SUM, async_op=False)
+  File "/usr/local/lib/python3.6/dist-packages/torch/distributed/distributed_c10d.py", line 905, in all_reduce
+    work.wait()
+RuntimeError: [/pytorch/third_party/gloo/gloo/transport/tcp/pair.cc:575] Connection closed by peer [127.0.0.1]:11481
+slurmstepd: error: *** JOB 341537 ON gpu46 CANCELLED AT 2023-01-10T04:37:45 DUE TO TIME LIMIT ***

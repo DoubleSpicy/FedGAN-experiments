@@ -121,23 +121,49 @@ def load_dataset(dataset_name,
                 colors:tuple = None, 
                 debug=False,
                 group='a',
-                root=''):
+                root='',
+                P_Negative=0
+                ):
     if random_colors == 'all_random':
-        dataset = datasets.MNIST(
-                "{}/data/mnist".format(root),
-                train=True,
-                download=True,
-                transform = transforms.Compose([
-                    transforms.Resize(32),
-                    transforms.Grayscale(3),
-                    CustomColorChange(colors=colors, all_random=True, debug=debug),
-                    transforms.ToTensor(),
-                    transforms.Normalize((0.5, ), (0.5, )),
-                ]))
-        
+        trainset = []
+        if dataset_name == 'MNIST':
+            dataset = datasets.MNIST(
+                    "{}/data/mnist".format(root),
+                    train=True,
+                    download=True,
+                    transform = transforms.Compose([
+                        transforms.Resize(32),
+                        transforms.Grayscale(3),
+                        CustomColorChange(colors=colors, all_random=True, debug=debug),
+                        transforms.ToTensor(),
+                        transforms.Normalize((0.5, ), (0.5, )),
+                    ]))
+            trainset = random_split(dataset, cal_split_lengths(len(dataset), client_cnt), generator=torch.Generator().manual_seed(42))
+            img_shape = [3, 64, 64]
+        if dataset_name == 'CelebA':
+            if group == 'a':
+                dataset = celeba(root_dir='../data/', 
+                                attr_data='list_attr_celeba.txt', 
+                                img_path='img_align_celeba', 
+                                attr_filter=['+Eyeglasses'],
+                                transform=transforms.Compose([transforms.Resize([64, 64]),
+                                                                    transforms.ToTensor(),
+                                                                    transforms.Normalize((0.5, ), (0.5, ))])
+                                ,proportion=P_Negative)
+            elif group == 'b':
+                dataset = celeba(root_dir='../data/', 
+                                attr_data='list_attr_celeba.txt', 
+                                img_path='img_align_celeba', 
+                                attr_filter=['+Eyeglasses'],
+                                transform=transforms.Compose([transforms.Resize([64, 64]),
+                                                                    transforms.ToTensor(),
+                                                                    transforms.Normalize((0.5, ), (0.5, ))])
+                                ,proportion=1-P_Negative)
+            img_shape = [3, 64, 64]
+            trainset.append(dataset)
 
         # print(len(dataset))
-        trainset = random_split(dataset, cal_split_lengths(len(dataset), client_cnt), generator=torch.Generator().manual_seed(42))
+        
     elif random_colors == '1_per_group':
         trainset = []
         for i in range(client_cnt):
@@ -169,7 +195,7 @@ def load_dataset(dataset_name,
                                     transform=transforms.Compose([transforms.Resize([64, 64]),
                                                                         transforms.ToTensor(),
                                                                         transforms.Normalize((0.5, ), (0.5, ))])
-                                    )
+                                    ,proportion=0)
                 else:
                     # print("b", i)
                     dataset = celeba(root_dir='../data/', 
@@ -178,7 +204,8 @@ def load_dataset(dataset_name,
                                     attr_filter=['-Eyeglasses'],
                                     transform=transforms.Compose([transforms.Resize([64, 64]),
                                                                         transforms.ToTensor(),
-                                                                        transforms.Normalize((0.5, ), (0.5, ))]))
+                                                                        transforms.Normalize((0.5, ), (0.5, ))])
+                                    ,proportion=0)
                     if i > 0:
                         equalize(trainset[0], dataset)
             elif dataset_name == 'TinyImageNet':
@@ -206,6 +233,7 @@ def load_dataset(dataset_name,
     # print('=======================')
     trainloader = list()
     for i in range(0, client_cnt):
+        # trainset[i]
         trainloader.append(torch.utils.data.DataLoader(trainset[i], batch_size=batch_size,
                                                 shuffle=True, drop_last=True))
     return trainloader, img_shape

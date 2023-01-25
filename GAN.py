@@ -60,7 +60,7 @@ class Discriminator(nn.Module):
         validity = self.model(img_flat)
         return validity
 
-def update(generator: Generator, 
+def train_1_epoch(generator: Generator, 
                     discriminator: Discriminator, 
                     cuda=True, n_critic=10, 
                     data=None, 
@@ -97,7 +97,7 @@ def update(generator: Generator,
             p.data.clamp_(-clip_value, clip_value)
 
         if debug:
-            print(f'  Device:{id%size} | ID:{id} | g_iter:{g_iter} | d_iter: {d_iter+1}/{n_critic}, d_loss: {loss_D}')
+            print(f'  Device:{id%size} | ID:{id} | Discriminator iteration: {d_iter+1}/{n_critic}, d_loss: {loss_D}')
     # train G
     generator.optimizer.zero_grad()
     z = Variable(Tensor(np.random.normal(0, 1, (images.shape[0], latent_dim)))).cuda(id % size)
@@ -107,7 +107,7 @@ def update(generator: Generator,
     loss_G.backward()
 
     generator.optimizer.step()
-    print(f'Device:{id%size} | ID:{id} | g_iter:{g_iter}/{n_epochs} | g_loss: {loss_G}')
+    print(f'Generator iteration: {g_iter}/{n_epochs}, g_loss: {loss_G}')
     if (g_iter) % 100 == 0:
         if not os.path.exists('{}/training_result_images/'.format(root)):
             os.makedirs('{}/training_result_images/'.format(root))
@@ -123,7 +123,7 @@ def update(generator: Generator,
     print("Time {}".format(time))
     save_model(generator, discriminator, id, root)
 
-def update_D(generator: Generator, 
+def train_1_epoch_D(generator: Generator, 
                     discriminator: Discriminator, 
                     cuda=True, n_critic=10, 
                     data=None, 
@@ -160,9 +160,9 @@ def update_D(generator: Generator,
             p.data.clamp_(-clip_value, clip_value)
 
         if debug:
-            print(f'  Device:{id%size} | ID:{id} | g_iter:{g_iter} | d_iter: {d_iter+1}/{n_critic}, d_loss: {loss_D}')
+            print(f'  Device:{id%size} | ID:{id} | Discriminator iteration: {d_iter+1}/{n_critic}, d_loss: {loss_D}')
             
-def update_G(generator: Generator, 
+def train_1_epoch_G(generator: Generator, 
                     discriminator: Discriminator, 
                     cuda=True, n_critic=10, 
                     data=None, 
@@ -193,7 +193,7 @@ def update_G(generator: Generator,
     loss_G.backward()
 
     generator.optimizer.step()
-    print(f'Device:{id%size} | ID:{id} | g_iter:{g_iter}/{n_epochs} | g_loss: {loss_G}')
+    print(f'id: {id} | Generator iteration: {g_iter}/{n_epochs}, g_loss: {loss_G}')
     
     # send_params(generator)
     # if id == 0:
