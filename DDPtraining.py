@@ -6,10 +6,11 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-
 from utils.loader import load_dataset, get_infinite_batches, load_model
 
 import argparse
+
+
 
 def init_process(rank, size, fn, backend='gloo'):
     """ Initialize the distributed environment. """
@@ -27,12 +28,12 @@ parser.add_argument('--batch_size', type=int, default=64, required=False)
 parser.add_argument('--channels', type=int, default=3, required=False)
 parser.add_argument('--n_critic', type=int, default=10, required=False)
 parser.add_argument('--client_cnt', type=int, default=torch.cuda.device_count(), required=False)
-parser.add_argument('--share_D', type=str, default='False', required=False)
+parser.add_argument('--share_D', type=str, default='True', required=False)
 parser.add_argument('--load_G', type=str, default='False', required=False)
 parser.add_argument('--load_D', type=str, default='False', required=False)
 parser.add_argument('--eval_only', type=str, default='False', required=False)
 parser.add_argument('--debug', type=str, default='True', required=False)
-parser.add_argument('--proportion', type=float, default=0.6, required=False)
+parser.add_argument('--proportion', type=float, default=0.4, required=False)
 parser.add_argument('--random_colors', type=str, default='all_random', required=False)
 parser.add_argument('--resize_to', type=int, default=32, required=False)
 parser.add_argument('--time_now', type=str, default='', required=False)
@@ -62,9 +63,9 @@ resize_to = 32
 assert average_method in ['euclidean', 'wasserstein']
 assert model in ['GAN', 'WGAN-GP']
 if model == 'GAN':
-    from models.GAN import Generator, Discriminator, update, update_D, update_G, send_params, recv_params, save_sample
+    from models.GAN import Generator, Discriminator, update, update_G, send_params, recv_params, save_sample
 if model == 'WGAN-GP':
-    from models.WGAN_GP import Generator, Discriminator, update, update_D, save_sample
+    from models.WGAN_GP import Generator, Discriminator, update, save_sample
 os.makedirs("runs", exist_ok=True)
 root = "runs/" + ''
 args_dict = dict(vars(args))
@@ -119,16 +120,15 @@ def run(rank, size):
     if not eval_only:
         for i in range(1, n_epochs+1):
             print(f'iter {i}')
-            # update_D(model_G, model_D, cuda=True, n_critic=int(n_critic/2), data=get_infinite_batches(trainloader[0]),
-            # batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size)
             update(model_G, model_D, cuda=True, n_critic=int(n_critic/2), data=get_infinite_batches(trainloader[0]),
             batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size, D_only=True)
             # average_params(model_G, 'G')
-            if share_D:
-                average_params(model_D ,'D')
+            # if share_D:
+            #     average_params(model_D ,'D')
             update(model_G, model_D, cuda=True, n_critic=int(n_critic/2), data=get_infinite_batches(trainloader[0]),
             batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size, D_only=False)
-            average_params(model_G, 'G')
+            if i % avg_mod == 0:
+                average_params(model_G, 'G')
             if share_D:
                 average_params(model_D, 'D')
             if dist.get_rank() == 0 and (i % 100 == 0 or i == n_epochs):
@@ -168,6 +168,7 @@ def average_params(model: torch.nn.Module, str):
     for param in model.parameters():
         dist.all_reduce(param.data, op=dist.ReduceOp.SUM, async_op=False)
         param.data /= size
+
 
 if __name__ == "__main__":
     processes = []

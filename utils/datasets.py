@@ -14,7 +14,7 @@ import torch.distributed as dist
 import math
 
 class celeba(Dataset):
-    def __init__(self, root_dir: str, img_path: str, attr_data, attr_filter: list = None, transform: transforms = None, proportion: int = 0):
+    def __init__(self, root_dir: str, img_path: str, attr_data, attr_filter: list = None, transform: transforms = None, proportion: int = 0, rotary = True):
         self.root_dir = os.path.join(root_dir, __class__.__name__)
         self.img_path = os.path.join(self.root_dir, img_path)
         self.proportion = proportion
@@ -25,6 +25,9 @@ class celeba(Dataset):
         else:
             self.attribute_data = attr_data # direct load
         self.attr_filter = attr_filter
+        if rotary:
+            drop_list = rotary_reduce(self.attribute_data.index.tolist())
+            self.attribute_data.drop(drop_list)
         self._filter_attribute_tag()
         self.transform = transform
 
@@ -40,7 +43,10 @@ class celeba(Dataset):
             image = self.transform(image)
         else:
             image = np.array(image)
-        return image, self.attr_filter
+        tag = str(self.attr_filter[0]).lstrip('+').lstrip('-')
+        flag = int(self.attribute_data.iloc[index][tag])
+        flag = max(flag, 0)
+        return image, flag
 
     def _process_tags(self):
         positive_list, negative_list = list(), list()
@@ -53,8 +59,6 @@ class celeba(Dataset):
         return positive_list, negative_list
 
     def _filter_attribute_tag(self):
-        drop_list = rotary_reduce(self.attribute_data.index.tolist())
-        self.attribute_data = self.attribute_data.drop(drop_list)
         remove_index_list = []
         positive_list, negative_list = self._process_tags()
         if self.proportion == 0:
