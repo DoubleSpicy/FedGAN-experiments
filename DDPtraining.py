@@ -78,6 +78,9 @@ os.makedirs(root, exist_ok=True)
 
 if average_method == 'wasserstein':
     from barycenters import wasserstein
+
+negative_proportion = [0.5, 0.1, 0.1, 0.1]
+
 def run(rank, size):
     group = 'a' if rank < proportion else 'b'
     if random_colors == 'all_random':
@@ -90,10 +93,10 @@ def run(rank, size):
                     batch_size=batch_size,
                     colors = None, 
                     debug=debug,
-                    group=group,
                     root='.',
-                    P_Negative=proportion)
-    print(f'rank: {dist.get_rank()}, dataloader group: {group}')
+                    P_Negative=negative_proportion[rank],
+                    rank = dist.get_rank())
+    print(f'rank: {dist.get_rank()}, dataloader ratio: {str(1-negative_proportion[rank])}:{negative_proportion[rank]}')
     print('device:', rank%size)
     model_G = Generator(img_shape=img_shape).to(rank % size)
     if load_G:
@@ -103,15 +106,15 @@ def run(rank, size):
         load_model(f'{root}/discriminator_pid_{dist.get_rank()}.pkl', model_D)
     print('share_D:',share_D)
 
-    print(model_G)
-    for params in model_G.parameters():
-        # print(params)
-        print(params.data.size())
+    # print(model_G)
+    # for params in model_G.parameters():
+    #     # print(params)
+    #     print(params.data.size())
 
-    print(model_D)
-    for params in model_D.parameters():
-        # print(params)
-        print(params.data.size())
+    # print(model_D)
+    # for params in model_D.parameters():
+    #     # print(params)
+    #     print(params.data.size())
 
     # test = True
     # if test:
@@ -139,28 +142,6 @@ def run(rank, size):
         if dist.get_rank() == 0:
             save_sample(generator=model_G, cuda_index=rank % size, root=root, g_iter=n_epochs)
 
-def cal_wasserstein_params(model: torch.nn.Module, str):
-    print(f'rank:{dist.get_rank()}| computing wasserstein barycenter of {str}')
-    size = dist.get_world_size()
-    for param in model.parameters():
-        tensor_list = [param.data * size]
-        dist.all_gather(tensor_list, param.data)
-        pairwise_dist = cal_pairwise_dist(tensor_list)
-        param.data = wasserstein.fixed_support_barycenter(tensor_list, pairwise_dist, verbose=True)
-    pass
-
-def cal_pairwise_dist(tensor_list: list):
-    d = len(tensor_list)
-    pairwise_dist = [d ** 2, d ** 2]
-    for i in range(d):
-        for j in range(d):
-            for k in range(d):
-                for l in range(d):
-                    pairwise_dist[i][j] = 0
-    return pairwise_dist
-
-def needAvg(i, module):
-    return i % avg_mod == 0 and delay == module
 
 def average_params(model: torch.nn.Module, str):
     print(f'rank:{dist.get_rank()}| averaging {str}')

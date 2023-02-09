@@ -120,7 +120,6 @@ def load_dataset(dataset_name,
                 batch_size=64,
                 colors:tuple = None, 
                 debug=False,
-                group='a',
                 root='',
                 P_Negative=0
                 ):
@@ -141,94 +140,21 @@ def load_dataset(dataset_name,
             trainset = random_split(dataset, cal_split_lengths(len(dataset), client_cnt), generator=torch.Generator().manual_seed(42))
             img_shape = [3, 64, 64]
         if dataset_name == 'CelebA':
-            if group == 'a':
-                dataset = celeba(root_dir='../data/', 
-                                attr_data='list_attr_celeba.txt', 
-                                img_path='img_align_celeba', 
-                                attr_filter=['+Eyeglasses'],
-                                transform=transforms.Compose([transforms.Resize([64, 64]),
-                                                                    transforms.ToTensor(),
-                                                                    transforms.Normalize((0.5, ), (0.5, ))])
-                                ,proportion=P_Negative)
-            elif group == 'b':
-                dataset = celeba(root_dir='../data/', 
-                                attr_data='list_attr_celeba.txt', 
-                                img_path='img_align_celeba', 
-                                attr_filter=['+Eyeglasses'],
-                                transform=transforms.Compose([transforms.Resize([64, 64]),
-                                                                    transforms.ToTensor(),
-                                                                    transforms.Normalize((0.5, ), (0.5, ))])
-                                ,proportion=1-P_Negative)
-            img_shape = [3, 64, 64]
-            trainset.append(dataset)
 
-        # print(len(dataset))
-        
-    elif random_colors == '1_per_group':
-        trainset = []
-        for i in range(client_cnt):
-            assert dataset_name in ['MNIST', 'CelebA', 'TinyImageNet']
-            if dataset_name == 'MNIST':
-                dataset = datasets.MNIST("../data/mnist",
-                                        train=True,
-                                        download=True,
-                                        transform = transforms.Compose([
-                                        transforms.Resize(64),
-                                        transforms.Grayscale(channels),
-                                        # CustomColorChange(colors=colors, all_random=False, debug=debug),
-                                        transforms.ToTensor(),
-                                        transforms.Normalize((0.5, ), (0.5, ))
-                                        ]))
-                if group == 'a':
-                    indices = dataset.targets == 0 # if you want to keep images with the label 5
-                else:
-                    indices = dataset.targets == 1 # if you want to keep images with the label 5
-                dataset.data, dataset.targets = dataset.data[indices], dataset.targets[indices]
-                img_shape = [3, 64, 64]
-            elif dataset_name == 'CelebA':
-                if (group == 'a'):
-                    # print("a", i)
-                    dataset = celeba(root_dir='../data/', 
-                                    attr_data='list_attr_celeba.txt', 
-                                    img_path='img_align_celeba', 
-                                    attr_filter=['+Eyeglasses'],
-                                    transform=transforms.Compose([transforms.Resize([64, 64]),
-                                                                        transforms.ToTensor(),
-                                                                        transforms.Normalize((0.5, ), (0.5, ))])
-                                    ,proportion=0)
-                else:
-                    # print("b", i)
-                    dataset = celeba(root_dir='../data/', 
-                                    attr_data='list_attr_celeba.txt', 
-                                    img_path='img_align_celeba', 
-                                    attr_filter=['-Eyeglasses'],
-                                    transform=transforms.Compose([transforms.Resize([64, 64]),
-                                                                        transforms.ToTensor(),
-                                                                        transforms.Normalize((0.5, ), (0.5, ))])
-                                    ,proportion=0)
-                    if i > 0:
-                        equalize(trainset[0], dataset)
-            elif dataset_name == 'TinyImageNet':
-                if (group == 'a'):
-                    dataset = TinyImageNet(root_dir='../data/tiny-imagenet-200/', 
-                            attr_data='classes.csv', 
-                            img_path='train',
-                            attr_filter=['+ox'],
-                            transform=transforms.Compose([transforms.Resize([64, 64]),
-                                                                            transforms.ToTensor(),
-                                                                            transforms.Normalize((0.5, ), (0.5, ))]))
-                    
-                else:
-                    dataset = TinyImageNet(root_dir='../data/tiny-imagenet-200/', 
-                            attr_data='classes.csv', 
-                            img_path='train',
-                            attr_filter=['+mushroom'],
-                            transform=transforms.Compose([transforms.Resize([64, 64]),
-                                                                            transforms.ToTensor(),
-                                                                            transforms.Normalize((0.5, ), (0.5, ))]))
-                # print(dataset.attribute_data)
+            transformA = [transforms.Resize([64, 64]),
+                                                                transforms.ToTensor(),
+                                                                transforms.Normalize((0.5, ), (0.5, ))]
+            transformB =             [transforms.CenterCrop((178, 178)),
+                                       transforms.Resize((64, 64)),
+                                       transforms.ToTensor()]
+            dataset = celeba(root_dir='../data/', 
+                            attr_data='list_attr_celeba.txt', 
+                            img_path='img_align_celeba', 
+                            attr_filter=['+Eyeglasses'],
+                            transform=transforms.Compose(transformA)
+                            ,proportion=P_Negative,
+                            rotary=True)
             img_shape = [3, 64, 64]
-            # print(len(dataset))
             trainset.append(dataset)
     # print('=======================')
     trainloader = list()

@@ -340,10 +340,16 @@ def calculate_gradient_penalty(real_images,
 
 def save_sample(generator: Generator, cuda_index: int, root: str, g_iter: int):
     # Denormalize images and save them in grid 8x8
-    z = get_torch_variable(torch.randn(800, 100, 1, 1), True, cuda_index)
-    samples = generator(z).to(cuda_index)
-    # print(samples)
+    samples = generate_images(generator, 64, cuda_index)
     samples = samples.mul(0.5).add(0.5)
     samples = samples.data.cpu()[:64]
     grid = utils.make_grid(samples)
     utils.save_image(grid, '{}/training_result_images/afterAvg_iter_{}_pid_{}.png'.format(root, str(g_iter).zfill(3), dist.get_rank()))
+
+
+def generate_images(generator: Generator, batch_size = 64, cuda_index = 0):
+    z = get_torch_variable(torch.randn(800, 100, 1, 1), True, cuda_index)
+    samples = generator(z).to(cuda_index)
+    samples = samples.mul(0.5).add(0.5)
+    samples = samples.data.cpu()[:64]
+    return samples

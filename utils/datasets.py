@@ -64,6 +64,7 @@ class celeba(Dataset):
         if self.proportion == 0:
             for tags in positive_list:
                 remove_index_list += self.attribute_data[self.attribute_data[tags] != 1].index.to_list()
+                # self.attribute_data.loc[self.attribute_data[tags] == -1] = 0
             for tags in negative_list:
                 remove_index_list += self.attribute_data[self.attribute_data[tags] != -1].index.to_list()
         else:
@@ -72,6 +73,7 @@ class celeba(Dataset):
             # proportion = P(opposite class)
 
             if len(positive_list) == 1:
+                # self.attribute_data.loc[self.attribute_data[tags] == -1] = 0
                 tags = positive_list[0]
                 negativeCnt = len(self.attribute_data[self.attribute_data[tags] == -1])
                 positiveCnt = len(self.attribute_data) - negativeCnt
@@ -79,10 +81,10 @@ class celeba(Dataset):
                 dropCnt = math.floor((self.proportion * (positiveCnt + negativeCnt) - negativeCnt) / (self.proportion - 1))
                 remove_index_list = np.random.choice(self.attribute_data[self.attribute_data[tags] == -1].index, dropCnt, replace=False)
                 self.attribute_data = self.attribute_data.drop(remove_index_list)
-
-        print(self.attribute_data[self.attribute_data['Eyeglasses'] == -1])
-        print(self.attribute_data[self.attribute_data['Eyeglasses'] == 1])
-        print(len(self.attribute_data))
+        # print(self.attribute_data[self.attribute_data['Eyeglasses'] == 1])
+        # print(self.attribute_data[self.attribute_data['Eyeglasses'] == -1])
+        
+        print("rank:", dist.get_rank() if dist.is_initialized() else "0", len(self.attribute_data[self.attribute_data['Eyeglasses'] == 1]), len(self.attribute_data[self.attribute_data['Eyeglasses'] == -1]), len(self.attribute_data))
 
 
     def _load_csv(self, path, skip_first_row=False):
