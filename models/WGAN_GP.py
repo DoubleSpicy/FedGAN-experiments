@@ -348,8 +348,8 @@ def save_sample(generator: Generator, cuda_index: int, root: str, g_iter: int):
 
 
 def generate_images(generator: Generator, batch_size = 64, cuda_index = 0):
-    z = get_torch_variable(torch.randn(800, 100, 1, 1), True, cuda_index)
+    z = get_torch_variable(torch.randn(64, 100, 1, 1), True, cuda_index)
     samples = generator(z).to(cuda_index)
     samples = samples.mul(0.5).add(0.5)
-    samples = samples.data.cpu()[:64]
+    samples = samples.data[:64]
     return samples

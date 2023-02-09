@@ -54,11 +54,12 @@ def load_model(filename, model):
 
 
 
-def save_model(generator, discriminator, id, root):
+def save_model(generator, discriminator, id, root, averaged=False):
     model_path = os.path.join(os.getcwd(), root)
-    torch.save(generator.state_dict(), '{}/generator_pid_{}.pkl'.format(model_path, id))
-    torch.save(discriminator.state_dict(), '{}/discriminator_pid_{}.pkl'.format(model_path, id))
-    print('Models save to {}/generator_pid_{}.pkl & {}/discriminator_pid_{}.pkl '.format(model_path, id, model_path, id))
+    averagedStr = "_averaged" if averaged else ""
+    torch.save(generator.state_dict(), '{}/generator{}_pid_{}.pkl'.format(model_path, averagedStr, id))
+    torch.save(discriminator.state_dict(), '{}/discriminator{}_pid_{}.pkl'.format(model_path, averagedStr, id))
+    print('Models save to {}/generator{}_pid_{}.pkl & {}/discriminator{}_pid_{}.pkl '.format(model_path, averagedStr, id, model_path, averagedStr, id))
 
 class CustomColorChange():
     ''' Change background color

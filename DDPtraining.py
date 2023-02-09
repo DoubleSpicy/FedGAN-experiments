@@ -6,7 +6,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from utils.loader import load_dataset, get_infinite_batches, load_model
+from utils.loader import load_dataset, get_infinite_batches, load_model, save_model
 
 import argparse
 
@@ -106,20 +106,6 @@ def run(rank, size):
         load_model(f'{root}/discriminator_pid_{dist.get_rank()}.pkl', model_D)
     print('share_D:',share_D)
 
-    # print(model_G)
-    # for params in model_G.parameters():
-    #     # print(params)
-    #     print(params.data.size())
-
-    # print(model_D)
-    # for params in model_D.parameters():
-    #     # print(params)
-    #     print(params.data.size())
-
-    # test = True
-    # if test:
-    #     return
-
     if not eval_only:
         for i in range(1, n_epochs+1):
             print(f'iter {i}')
@@ -136,7 +122,8 @@ def run(rank, size):
                 average_params(model_D, 'D')
             if dist.get_rank() == 0 and (i % 100 == 0 or i == n_epochs):
                 save_sample(generator=model_G, cuda_index=rank % size, root=root, g_iter=i)
-    
+            save_model(generator=model_G, discriminator=model_D, id=rank, root=root, averaged=True)
+            
     if eval_only:
         average_params(model_G, 'G')
         if dist.get_rank() == 0:
@@ -150,12 +137,23 @@ def average_params(model: torch.nn.Module, str):
         dist.all_reduce(param.data, op=dist.ReduceOp.SUM, async_op=False)
         param.data /= size
 
+def avg_only(rank, size):
+    print('*****one off averaging...*****')
+    model_G = Generator([3, 64, 64])
+    model_D = Discriminator([3, 64, 64])
+    load_model(f'{root}/generator_pid_{dist.get_rank()}.pkl', model_G)
+    load_model(f'{root}/discriminator_pid_{dist.get_rank()}.pkl', model_D)
+    average_params(model_G, 'G')
+    if share_D:
+        average_params(model_D, 'D')
+    if rank == 0:
+        save_model(generator=model_G, discriminator=model_D, id=rank, root=root, averaged=True)
 
 if __name__ == "__main__":
     processes = []
     mp.set_start_method("spawn")
     for rank in range(size):
-        p = mp.Process(target=init_process, args=(rank, size, run))
+        p = mp.Process(target=init_process, args=(rank, size, avg_only))
         p.start()
         processes.append(p)
 

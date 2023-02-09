@@ -25,7 +25,7 @@ import torch.multiprocessing as mp
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model', type=str, default='resnet50', required=False)
-parser.add_argument('--mode', type=str, default='saveData', required=False)
+parser.add_argument('--mode', type=str, default='move', required=False)
 parser.add_argument('--load_model', type=str, default='False', required=False)
 parser.add_argument('--num_epochs', type=int, default=24, required=False) # 13193*2/64
 parser.add_argument('--share_D', type=str, default='True', required=False)
@@ -307,25 +307,46 @@ def eval_model(GAN: Generator, model: ResNet, iters: int, device=0, batch_size=6
     print(f'Running {iter} * {batch_size}:\nPositive count: {posi_count}\nNegative count {num_examples-posi_count}')
     print(f'ratio: {posi_count/(num_examples-posi_count)}:1')
 
-def saveImageBatches(rank, size):
+def saveImageBatches(rank, size, averaged=True):
+    averagedStr = '_averaged' if averaged else ''
     device = rank
-    path = os.path.join(os.getcwd(), 'samples' + 'share_D' + share_D + str(device))
+    path = os.path.join(os.getcwd(), 'samples' + 'share_D' + share_D + averagedStr +  str(device))
     if not os.path.exists(path):
         os.makedirs(path)
     print(path)
     GAN = Generator([3, 64, 64]).to(device)
-    load_state_dict(f'runs/_WGAN-GP_0.4_{share_D}_CelebA_AvgMod_1_delay_/generator_pid_{device}.pkl', GAN)
+    load_state_dict(f'runs/_WGAN-GP_0.4_{share_D}_CelebA_AvgMod_1_delay_/generator{averagedStr}_pid_{device}.pkl', GAN)
     # saveImageBatches(GAN, str(path))
     for i in range(100):
         samples = generate_images(GAN, 64, device)
         samples = torch.unbind(samples, dim=0)
         for j in range(len(samples)):
+            if i == 0:
+                print(f'len(samples): {len(samples)}')
             torchvision.utils.save_image(samples[j], path + "/" + str(i*64+j).zfill(6) + '.png')
-            print(f'saving to: {path}/{str(i*64+j).zfill(6)}.png')
+            if j == 63:
+                print(f'saving to: {path}/{str(i*64+j).zfill(6)}.png')
+
+def makeGrids(rank, size, averaged=True):
+    averagedStr = '_averaged' if averaged else ''
+    device = rank
+    path = os.path.join(os.getcwd(), 'grids_' + 'share_D' + share_D + averagedStr +  str(device))
+    if not os.path.exists(path):
+        os.makedirs(path)
+    print(path)
+    GAN = Generator([3, 64, 64]).to(device)
+    load_state_dict(f'runs/_WGAN-GP_0.4_{share_D}_CelebA_AvgMod_1_delay_/generator{averagedStr}_pid_{device}.pkl', GAN)
+    # saveImageBatches(GAN, str(path))
+    for i in range(100):
+        samples = generate_images(GAN, 64, device)
+        grid = torchvision.utils.make_grid(samples)
+        torchvision.utils.save_image(grid, path + "/" + str(i).zfill(6) + '.png')
+
 
 def saveData(rank, size):
     device = rank
     path = os.path.join(os.getcwd(), 'data' + str(device))
+    allPath = os.path.join(os.getcwd(), 'dataAll')
     if not os.path.exists(path):
         os.makedirs(path)
     trainloader, img_shape = load_dataset(dataset_name='CelebA',
@@ -342,6 +363,7 @@ def saveData(rank, size):
         image = torch.unbind(image)
         for j in range(len(image)):
             torchvision.utils.save_image(image[j], path + "/" + str(batch*64+j).zfill(6) + '.png')
+            torchvision.utils.save_image(image[j], allPath + "/" + str(batch*64+j).zfill(6) + 'device' + device + '.png')
             print(f'saving to: {path}/{str(batch*64+j).zfill(6)}.png')
         batch += 1
 
@@ -360,16 +382,7 @@ if __name__ == '__main__':
         load_state_dict('resnet50.pt', classifier)
         eval_model(GAN=GAN, model=classifier, iters=100, batch_size=64)
     elif mode == 'saveSamples':
-        processes = []
-        mp.set_start_method("spawn")
-        size = torch.cuda.device_count()
-        for rank in range(size):
-            p = mp.Process(target=init_process, args=(rank, size, saveImageBatches))
-            p.start()
-            processes.append(p)
-
-        for p in processes:
-            p.join()
+        saveImageBatches(0, 0)
     
     elif mode == 'saveData':
         processes = []
@@ -382,3 +395,14 @@ if __name__ == '__main__':
 
         for p in processes:
             p.join()
+    elif mode == 'move':
+        import shutil
+        allPath = os.path.join(os.getcwd(), 'dataAll')
+        for i in range(4):
+            path = os.path.join(os.getcwd(), 'data' + str(i))
+            for root, _, files in os.walk(path):
+                for f in files:
+                    newName = f.rstrip('.png') + f'device{i}.png' 
+                    shutil.copy2(f'{root}/{f}', f'{str(allPath)}/{newName}')
+    elif mode == 'makeGrids':
+        makeGrids(0, 0)
