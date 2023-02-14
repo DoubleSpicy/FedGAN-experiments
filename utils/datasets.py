@@ -77,14 +77,14 @@ class celeba(Dataset):
                 tags = positive_list[0]
                 negativeCnt = len(self.attribute_data[self.attribute_data[tags] == -1])
                 positiveCnt = len(self.attribute_data) - negativeCnt
-                # dropCnt = math.floor(negativeCnt - self.proportion * (positiveCnt))
                 dropCnt = math.floor((self.proportion * (positiveCnt + negativeCnt) - negativeCnt) / (self.proportion - 1))
+                print(f'positiveCnt: {positiveCnt}, negativeCnt: {negativeCnt}, dropCnt: {dropCnt}')
                 remove_index_list = np.random.choice(self.attribute_data[self.attribute_data[tags] == -1].index, dropCnt, replace=False)
                 self.attribute_data = self.attribute_data.drop(remove_index_list)
         # print(self.attribute_data[self.attribute_data['Eyeglasses'] == 1])
         # print(self.attribute_data[self.attribute_data['Eyeglasses'] == -1])
         
-        print("rank:", dist.get_rank() if dist.is_initialized() else "0", len(self.attribute_data[self.attribute_data['Eyeglasses'] == 1]), len(self.attribute_data[self.attribute_data['Eyeglasses'] == -1]), len(self.attribute_data))
+        # print("rank:", dist.get_rank() if dist.is_initialized() else "0", len(self.attribute_data[self.attribute_data['Eyeglasses'] == 1]), len(self.attribute_data[self.attribute_data['Eyeglasses'] == -1]), len(self.attribute_data))
 
 
     def _load_csv(self, path, skip_first_row=False):

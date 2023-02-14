@@ -294,7 +294,7 @@ def resnet50(num_classes, grayscale):
 def eval_model(GAN: Generator, model: ResNet, iters: int, device=0, batch_size=64):
     print('evaluating generator ratios...')
     posi_count ,num_examples = 0, 0
-    for i in range(iters):
+    for i in range(1, iters+1):
         if i % 10:
             print(f'iter: {i}|sampled pictures: {num_examples}')
         samples = generate_images(generator=GAN, batch_size=batch_size)
@@ -302,10 +302,12 @@ def eval_model(GAN: Generator, model: ResNet, iters: int, device=0, batch_size=6
         samples = nn.functional.interpolate(samples, (128, 128)).to(device)
         logits, probas = model(samples)
         _, predicted_labels = torch.max(probas, 1)
-        num_examples += samples.size(0)
+        num_examples += predicted_labels.size(0)
         posi_count += (predicted_labels == 1).sum()
-    print(f'Running {iter} * {batch_size}:\nPositive count: {posi_count}\nNegative count {num_examples-posi_count}')
-    print(f'ratio: {posi_count/(num_examples-posi_count)}:1')
+    nega_count = num_examples - posi_count
+    ratio = float(posi_count) / float(nega_count)
+    print(f'Running {iters} * {batch_size}:\nPositive count: {posi_count}\nNegative count {nega_count}')
+    print(f'ratio: {ratio}:1')
 
 def saveImageBatches(rank, size, averaged=True):
     averagedStr = '_averaged' if averaged else ''
@@ -377,7 +379,7 @@ if __name__ == '__main__':
     elif mode == 'GAN':
         # eval inputs from GAN.
         GAN = Generator([3, 64, 64]).to(0)
-        load_state_dict('generator_pid_0.pkl', GAN)
+        load_state_dict(f'runs/_WGAN-GP_0.4_{share_D}_CelebA_AvgMod_1_delay_/generator_averaged_pid_0.pkl', GAN)
         classifier = resnet50(2, False).to(0)
         load_state_dict('resnet50.pt', classifier)
         eval_model(GAN=GAN, model=classifier, iters=100, batch_size=64)

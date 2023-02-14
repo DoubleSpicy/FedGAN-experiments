@@ -9,7 +9,7 @@ from utils.loader import save_model
 from utils.helper_functions import get_torch_variable
 from torch.autograd import Variable
 import torch.distributed as dist
-
+from utils.lossLogger import lossLogger
 
 class Generator(torch.nn.Module):
     def __init__(self, img_shape):
@@ -190,7 +190,8 @@ def update(generator: Generator,
                     id=-1,
                     root='',
                     size=0,
-                    D_only=False):
+                    D_only=False,
+                    logger: lossLogger = None):
     t_begin = t.time()
 
     
@@ -270,6 +271,9 @@ def update(generator: Generator,
         generator.g_optimizer.step()
         print(f'Device:{id%size} | ID:{id} | g_iter:{g_iter}/{n_epochs} | g_loss: {g_loss}')
         # Saving model and sampling images every 1000th generator iterations
+
+        # write the logger
+        logger.concat(d_loss_real, d_loss_fake, g_loss)
         if (g_iter) % 100 == 0:
             if not os.path.exists('{}/training_result_images/'.format(root)):
                 os.makedirs('{}/training_result_images/'.format(root))
@@ -281,6 +285,8 @@ def update(generator: Generator,
             samples = samples.data.cpu()[:64]
             grid = utils.make_grid(samples)
             utils.save_image(grid, '{}/training_result_images/img_generatori_iter_{}_pid_{}.png'.format(root, str(g_iter).zfill(3), id))
+
+            
 
             # Testing
             time = t.time() - t_begin

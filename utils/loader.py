@@ -144,14 +144,14 @@ def load_dataset(dataset_name,
 
             transformA = [transforms.Resize([64, 64]),
                                                                 transforms.ToTensor(),
-                                                                transforms.Normalize((0.5, ), (0.5, ))]
+                                                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
             transformB =             [transforms.CenterCrop((178, 178)),
                                        transforms.Resize((64, 64)),
                                        transforms.ToTensor()]
             dataset = celeba(root_dir='../data/', 
                             attr_data='list_attr_celeba.txt', 
                             img_path='img_align_celeba', 
-                            attr_filter=['+Eyeglasses'],
+                            attr_filter=['+Male'],
                             transform=transforms.Compose(transformA)
                             ,proportion=P_Negative,
                             rotary=True)

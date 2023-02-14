@@ -7,7 +7,7 @@ import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from utils.loader import load_dataset, get_infinite_batches, load_model, save_model
-
+from utils.lossLogger import lossLogger
 import argparse
 
 
@@ -94,10 +94,14 @@ def run(rank, size):
                     colors = None, 
                     debug=debug,
                     root='.',
-                    P_Negative=negative_proportion[rank],
-                    rank = dist.get_rank())
+                    P_Negative=negative_proportion[rank]
+                    )
     print(f'rank: {dist.get_rank()}, dataloader ratio: {str(1-negative_proportion[rank])}:{negative_proportion[rank]}')
     print('device:', rank%size)
+
+    # lossLogger
+    logger = lossLogger(root, rank)
+
     model_G = Generator(img_shape=img_shape).to(rank % size)
     if load_G:
         load_model(f'{root}/generator_pid_{dist.get_rank()}.pkl', model_G)
@@ -109,13 +113,13 @@ def run(rank, size):
     if not eval_only:
         for i in range(1, n_epochs+1):
             print(f'iter {i}')
-            update(model_G, model_D, cuda=True, n_critic=int(n_critic/2), data=get_infinite_batches(trainloader[0]),
-            batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size, D_only=True)
+            # update(model_G, model_D, cuda=True, n_critic=int(n_critic/2), data=get_infinite_batches(trainloader[0]),
+            # batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size, D_only=True, logger=logger)
             # average_params(model_G, 'G')
             # if share_D:
             #     average_params(model_D ,'D')
-            update(model_G, model_D, cuda=True, n_critic=int(n_critic/2), data=get_infinite_batches(trainloader[0]),
-            batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size, D_only=False)
+            update(model_G, model_D, cuda=True, n_critic=1, data=get_infinite_batches(trainloader[0]),
+            batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size, D_only=False, logger=logger)
             if i % avg_mod == 0:
                 average_params(model_G, 'G')
             if share_D:
@@ -153,7 +157,7 @@ if __name__ == "__main__":
     processes = []
     mp.set_start_method("spawn")
     for rank in range(size):
-        p = mp.Process(target=init_process, args=(rank, size, avg_only))
+        p = mp.Process(target=init_process, args=(rank, size, run))
         p.start()
         processes.append(p)
 
