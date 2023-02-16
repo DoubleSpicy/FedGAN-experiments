@@ -7,7 +7,7 @@ import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from utils.loader import load_dataset, get_infinite_batches, load_model, save_model
-from utils.lossLogger import lossLogger
+from utils.lossLogger import lossLogger, FIDLogger
 import argparse
 
 
@@ -65,7 +65,7 @@ assert model in ['GAN', 'WGAN-GP']
 if model == 'GAN':
     from models.GAN import Generator, Discriminator, update, update_G, send_params, recv_params, save_sample
 if model == 'WGAN-GP':
-    from models.WGAN_GP import Generator, Discriminator, update, save_sample
+    from models.WGAN_GP import Generator, Discriminator, update, save_sample, generate_images
 os.makedirs("runs", exist_ok=True)
 root = "runs/" + ''
 args_dict = dict(vars(args))
@@ -86,21 +86,24 @@ def run(rank, size):
     if random_colors == 'all_random':
         group = 'a' if (rank+1)/size <= proportion else 'b'
     print(f'rank: {rank} | group: {group}')
-    trainloader, img_shape = load_dataset(dataset_name=dataset_name,
-                    random_colors=random_colors, 
-                    client_cnt=1, 
-                    channels=channels, 
-                    batch_size=batch_size,
-                    colors = None, 
-                    debug=debug,
-                    root='.',
-                    P_Negative=negative_proportion[rank]
-                    )
+    img_shape = [3, 64, 64]
+    if not eval_only:
+        trainloader, img_shape = load_dataset(dataset_name=dataset_name,
+                        random_colors=random_colors, 
+                        client_cnt=1, 
+                        channels=channels, 
+                        batch_size=batch_size,
+                        colors = None, 
+                        debug=debug,
+                        root='.',
+                        P_Negative=negative_proportion[rank]
+                        )
     print(f'rank: {dist.get_rank()}, dataloader ratio: {str(1-negative_proportion[rank])}:{negative_proportion[rank]}')
     print('device:', rank%size)
 
-    # lossLogger
-    logger = lossLogger(root, rank)
+    # loggers
+    loss_logger = lossLogger(root, rank, ['d_loss_fake', 'd_loss_real', 'g_loss'], 'iterations', 'loss')
+    FID_logger = FIDLogger(root, rank, 'iterations(*100)', 'FID score', os.getcwd(), ['fid'])
 
     model_G = Generator(img_shape=img_shape).to(rank % size)
     if load_G:
@@ -113,13 +116,13 @@ def run(rank, size):
     if not eval_only:
         for i in range(1, n_epochs+1):
             print(f'iter {i}')
-            # update(model_G, model_D, cuda=True, n_critic=int(n_critic/2), data=get_infinite_batches(trainloader[0]),
-            # batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size, D_only=True, logger=logger)
+            update(model_G, model_D, cuda=True, n_critic=int(n_critic/2), data=get_infinite_batches(trainloader[0]),
+            batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size, D_only=True, loss_logger=loss_logger, FID_logger=FID_logger)
             # average_params(model_G, 'G')
             # if share_D:
             #     average_params(model_D ,'D')
-            update(model_G, model_D, cuda=True, n_critic=1, data=get_infinite_batches(trainloader[0]),
-            batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size, D_only=False, logger=logger)
+            update(model_G, model_D, cuda=True, n_critic=int(n_critic/2), data=get_infinite_batches(trainloader[0]),
+            batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size, D_only=False, loss_logger=loss_logger, FID_logger=FID_logger)
             if i % avg_mod == 0:
                 average_params(model_G, 'G')
             if share_D:
@@ -129,7 +132,7 @@ def run(rank, size):
             save_model(generator=model_G, discriminator=model_D, id=rank, root=root, averaged=True)
             
     if eval_only:
-        average_params(model_G, 'G')
+        # average_params(model_G, 'G')
         if dist.get_rank() == 0:
             save_sample(generator=model_G, cuda_index=rank % size, root=root, g_iter=n_epochs)
 

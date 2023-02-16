@@ -9,7 +9,7 @@ from utils.loader import save_model
 from utils.helper_functions import get_torch_variable
 from torch.autograd import Variable
 import torch.distributed as dist
-from utils.lossLogger import lossLogger
+from utils.lossLogger import lossLogger, FIDLogger
 
 class Generator(torch.nn.Module):
     def __init__(self, img_shape):
@@ -191,7 +191,8 @@ def update(generator: Generator,
                     root='',
                     size=0,
                     D_only=False,
-                    logger: lossLogger = None):
+                    loss_logger: lossLogger = None,
+                    FID_logger: FIDLogger = None):
     t_begin = t.time()
 
     
@@ -273,7 +274,7 @@ def update(generator: Generator,
         # Saving model and sampling images every 1000th generator iterations
 
         # write the logger
-        logger.concat(d_loss_real, d_loss_fake, g_loss)
+        loss_logger.concat(d_loss_real, d_loss_fake, g_loss)
         if (g_iter) % 100 == 0:
             if not os.path.exists('{}/training_result_images/'.format(root)):
                 os.makedirs('{}/training_result_images/'.format(root))
@@ -347,8 +348,6 @@ def calculate_gradient_penalty(real_images,
 def save_sample(generator: Generator, cuda_index: int, root: str, g_iter: int):
     # Denormalize images and save them in grid 8x8
     samples = generate_images(generator, 64, cuda_index)
-    samples = samples.mul(0.5).add(0.5)
-    samples = samples.data.cpu()[:64]
     grid = utils.make_grid(samples)
     utils.save_image(grid, '{}/training_result_images/afterAvg_iter_{}_pid_{}.png'.format(root, str(g_iter).zfill(3), dist.get_rank()))
 
