@@ -126,16 +126,16 @@ def equalizePD(a: pd.DataFrame, tag: str, proportion: float):
     a = a.drop(drop_indices)
     return a
 
-if __name__ == '__main__':
-    dataset = celeba(root_dir='../data/', attr_data='list_attr_celeba.txt', img_path='img_align_celeba', attr_filter=['5_o_Clock_Shadow', '-Arched_Eyebrows'])
-    print(dataset.attribute_data)
-    print(len(dataset.attribute_data[dataset.attribute_data['Eyeglasses'] == 1]))
-    print(len(dataset.attribute_data[dataset.attribute_data['Eyeglasses'] == -1]))
-    print(len(dataset.attribute_data[dataset.attribute_data['Mustache'] == 1]))
-    print(len(dataset.attribute_data[dataset.attribute_data['Mustache'] == -1]))
-    # img = dataset.__getitem__(index=0)
-    # print(dataset.attribute_data)
-    # img.save('test.jpg')
+# if __name__ == '__main__':
+#     dataset = celeba(root_dir='../data/', attr_data='list_attr_celeba.txt', img_path='img_align_celeba', attr_filter=['5_o_Clock_Shadow', '-Arched_Eyebrows'])
+#     print(dataset.attribute_data)
+#     print(len(dataset.attribute_data[dataset.attribute_data['Eyeglasses'] == 1]))
+#     print(len(dataset.attribute_data[dataset.attribute_data['Eyeglasses'] == -1]))
+#     print(len(dataset.attribute_data[dataset.attribute_data['Mustache'] == 1]))
+#     print(len(dataset.attribute_data[dataset.attribute_data['Mustache'] == -1]))
+#     # img = dataset.__getitem__(index=0)
+#     # print(dataset.attribute_data)
+#     # img.save('test.jpg')
 
 
 class TinyImageNet(Dataset):
@@ -210,46 +210,83 @@ class TinyImageNet(Dataset):
             image = np.array(image)
         return image, self.attr_filter
 
-    # def __getitem__(self, name):
-    #     # if torch.is_tensor(name):
-    #     #     index = index.tolist()
-    #     # class_id = self.attribute_data.iloc[index // 500]['id']
-    #     # class_path = os.path.join(self.img_path, class_id + '/images')
-    #     # img_name = class_id + '_' + str(index % 500) + '.JPEG'
-    #     img_path = name
-    #     print(img_path)
-    #     image = Image.open(img_path).convert('RGB')
-    #     if self.transform:
-    #         image = self.transform(image)
 
-    #     else:
-    #         image = np.array(image)
-    #     return image, self.attr_filter
 
     def __len__(self):
         return len(self.attribute_data.index)*500
-# if __name__ == '__main__':
-#     test = TinyImageNet(root_dir='../data/tiny-imagenet-200/', 
-#                         attr_data='classes.csv', 
-#                         img_path='train',
-#                         attr_filter=['+ox', '+mushroom'],
-#                         transform=transforms.Compose([
-#                                                                         transforms.ToTensor(),
-#                                                                         transforms.Normalize((0.5, ), (0.5, ))]))
-#     print(test.attribute_data)
-    # img = test.__getitem__('../data/tiny-imagenet-200/train/n03930313/images/n03930313_473.JPEG')
-    # print(img)
-    # print(img[0].shape)
-    # temp = test.attribute_data
-    # file = open('../data/tiny-imagenet-200/available_classes.txt', 'r')
-    # lines = file.readlines()
-    # available_classes = []
-    # for line in lines:
-    #     available_classes.append(line.strip('\n'))
-    # print(available_classes)
-    # temp = temp.drop(temp[~temp['id'].str.contains('|'.join(available_classes), na=False)].index.to_list())
-    # print(temp)
-    # temp.to_csv(path_or_buf='../data/tiny-imagenet-200/classes.csv')
 
-    # test2 = celeba()
+
+class celeba(Dataset):
+    def __init__(self, root='../data/', tags: list = None) -> None:
+        super().__init__()
+        self.root_dir = os.path.join(root, 'celeba')
+        self.img_path = os.path.join(self.root_dir, 'img_align_celeba')
+        self.tags = tags
+        self.attribute_data = pd.read_csv(os.path.join(self.root_dir, 'list_attr_celeba.txt'), sep=' ', skiprows=[0])
+        self.attribute_data.columns = ["filename"] + self.attribute_data.columns.tolist()[:-1]
+        self.attribute_data = self.attribute_data[['filename'] + tags]
+        print(self.attribute_data)
+    
+    def load(self, df: pd.DataFrame):
+        self.attribute_data = df
+    
+    def __getitem__(self, index):
+        if torch.is_tensor(index):
+            index = index.tolist()
+        img_name = os.path.join(self.img_path, self.attribute_data.iloc[index, 0])
+        image = Image.open(img_name)
+        if self.transform:
+            image = self.transform(image)
+        else:
+            image = np.array(image)
+        flag = int(self.attribute_data.iloc[index][self.tags[0]])
+        flag = max(flag, 0)
+        return image, flag
+
+    def __len__(self):
+        return len(self.attribute_data.index)
+
+def split(df: pd.DataFrame, client_ratio: list, tag = None) -> list:
+    tag = tag[0]
+    client_positive, client_negative = 0.0, 0.0
+    for i in range(len(client_ratio)):
+        client_positive += float(client_ratio[i][0])
+        client_negative += float(client_ratio[i][1])
+    glob_positive, glob_negative = 1, client_negative/ client_positive 
+    positive, negative = len(df[df[tag] == 1]), len(df[df[tag] == -1])
+    # normalize global_ratio
+    # calculate how many items to get in list
+    flip = positive if glob_negative >= float(negative)/float(positive) else negative # the one with lesser then required
+    if glob_negative >= float(negative)/float(positive): # not enough negative samples
+        positive_filenames = np.random.choice(df[df[tag] == 1]['filename'].tolist(), int(negative/glob_negative), replace=False)
+        negative_filenames = np.random.choice(df[df[tag] == -1]['filename'].tolist(), negative, replace=False)
+    else: # not enough positive samples
+        positive_filenames = np.random.choice(df[df[tag] == 1]['filename'].tolist(), positive, replace=False)
+        negative_filenames = np.random.choice(df[df[tag] == -1]['filename'].tolist(), int(positive*glob_negative), replace=False)
+    
+    # total_len = len(positive_index) + len(negative_index)
+    # calculate splitting to each one
+    positive_index = df[df['filename'].isin(positive_filenames)].index
+    negative_index = df[df['filename'].isin(negative_filenames)].index
+    client_positive = [int(len(positive_index) * ratio[0] / (client_positive + 1e-9)) for ratio in client_ratio]
+    client_negative = [int(len(negative_index) * ratio[1] / (client_negative + 1e-9)) for ratio in client_ratio]
+    prevPos, prevNeg = 0, 0
+    client_positive_index, client_negative_index = [], []
+    for i in range(len(client_ratio)):
+        client_positive_index.append(positive_index[prevPos: prevPos + client_positive[i]+1])
+        client_negative_index.append(negative_index[prevNeg: prevNeg + client_negative[i]+1])
+        prevPos += client_positive[i]+1
+        prevNeg += client_negative[i]+1
+
+    return [df[df.index.isin(a) | df.index.isin(b)] for a, b in zip(client_positive_index, client_negative_index)]
+    
+
+if __name__ == '__main__':
+    data0 = celeba(root='../data/', tags=['Eyeglasses'])
+    data = split(data0.attribute_data, client_ratio=[[0.5, 0.5],  [0.9, 0.1],  [0.9, 0.1], [0.9, 0.1]], tag=['Eyeglasses'])
+    print('===============')
+    for d in data:
+        print(d)
+        print(len(d[d['Eyeglasses'] == 1]), len(d[d['Eyeglasses'] == -1]))
+
 

@@ -53,6 +53,7 @@ def init_process(rank, size, fn, backend='gloo'):
 
 def get_model_path():
     return str(model_path.joinpath(f'{model_name}' + '.pt'))
+    
 def setup_model():
     if model_name == 'resnet18':
         model = torchvision.models.resnet18()
@@ -78,7 +79,7 @@ def get_dataloader():
     dataset = celeba(root_dir='../data/', 
                                 attr_data='list_attr_celeba.txt', 
                                 img_path='img_align_celeba', 
-                                attr_filter=['+Eyeglasses'],
+                                attr_filter=['+Male'],
                                 transform=transforms.Compose([transforms.CenterCrop((178, 178)),
                                        transforms.Resize((128, 128)),
                                        #transforms.Grayscale(),                                       
@@ -326,8 +327,8 @@ def saveImageBatches(rank, size, averaged=True):
             if i == 0:
                 print(f'len(samples): {len(samples)}')
             torchvision.utils.save_image(samples[j], path + "/" + str(i*64+j).zfill(6) + '.png')
-            if j == 63:
-                print(f'saving to: {path}/{str(i*64+j).zfill(6)}.png')
+            # if j == 63:
+            #     print(f'saving to: {path}/{str(i*64+j).zfill(6)}.png')
 
 def makeGrids(rank, size, averaged=True):
     averagedStr = '_averaged' if averaged else ''
@@ -351,6 +352,8 @@ def saveData(rank, size):
     allPath = os.path.join(os.getcwd(), 'dataAll')
     if not os.path.exists(path):
         os.makedirs(path)
+    if not os.path.exists(allPath):
+        os.makedirs(allPath)
     trainloader, img_shape = load_dataset(dataset_name='CelebA',
                     random_colors='all_random', 
                     client_cnt=1, 
@@ -365,8 +368,8 @@ def saveData(rank, size):
         image = torch.unbind(image)
         for j in range(len(image)):
             torchvision.utils.save_image(image[j], path + "/" + str(batch*64+j).zfill(6) + '.png')
-            torchvision.utils.save_image(image[j], allPath + "/" + str(batch*64+j).zfill(6) + 'device' + device + '.png')
-            print(f'saving to: {path}/{str(batch*64+j).zfill(6)}.png')
+            torchvision.utils.save_image(image[j], allPath + "/" + str(batch*64+j).zfill(6) + 'device' + str(device) + '.png')
+            # print(f'saving to: {path}/{str(batch*64+j).zfill(6)}.png')
         batch += 1
 
 if __name__ == '__main__':

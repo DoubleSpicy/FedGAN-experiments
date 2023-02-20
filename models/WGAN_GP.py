@@ -274,7 +274,7 @@ def update(generator: Generator,
         # Saving model and sampling images every 1000th generator iterations
 
         # write the logger
-        loss_logger.concat(d_loss_real, d_loss_fake, g_loss)
+        loss_logger.concat([d_loss_real, d_loss_fake, g_loss])
         if (g_iter) % 100 == 0:
             if not os.path.exists('{}/training_result_images/'.format(root)):
                 os.makedirs('{}/training_result_images/'.format(root))

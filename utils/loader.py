@@ -164,3 +164,22 @@ def load_dataset(dataset_name,
         trainloader.append(torch.utils.data.DataLoader(trainset[i], batch_size=batch_size,
                                                 shuffle=True, drop_last=True))
     return trainloader, img_shape
+
+def load_dataset(root: str,
+                dataset: str,
+                client_proportion: list,
+                total_proportion: float,
+                tag_filter: list = None):
+    transformA = [transforms.Resize([64, 64]),
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+    if dataset == 'CelebA':
+        # dataset = celeba(root_dir='../data/', 
+        #                 attr_data='list_attr_celeba.txt', 
+        #                 img_path='img_align_celeba', 
+        #                 attr_filter=['+Male'],
+        #                 transform=transforms.Compose(transformA)
+        #                 ,proportion=P_Negative,
+        #                 rotary=True)
+        pass
+    return None
