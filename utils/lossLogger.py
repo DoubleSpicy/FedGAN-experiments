@@ -53,7 +53,7 @@ class lossLogger(logger):
         self._write()
 
 class FIDLogger(logger):
-    def __init__(self, dir: str, id: int, x_label: str, y_label: str, precomputed, columns: list = ['fid']) -> None:
+    def __init__(self, dir: str, id: int, x_label: str, y_label: str, precomputed: str, compute_func, columns: list = ['fid']) -> None:
         super().__init__(dir, id, columns, x_label, y_label)
         self.npz = precomputed
 

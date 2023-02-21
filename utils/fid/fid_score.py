@@ -49,7 +49,7 @@ except ImportError:
     def tqdm(x):
         return x
 
-from inception import InceptionV3
+from utils.fid.inception import InceptionV3
 
 parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
 parser.add_argument('--batch-size', type=int, default=50,
@@ -285,7 +285,7 @@ def save_fid_stats(paths, batch_size, device, dims, num_workers=1):
     np.savez_compressed(paths[1], mu=m1, sigma=s1)
 
 
-def compute_FID(externalPaths: list = None):
+def compute_FID(externalPaths: list = None, save_stat = False):
     args = parser.parse_args()
     if externalPaths != None:
         args.path = externalPaths
@@ -308,6 +308,7 @@ def compute_FID(externalPaths: list = None):
     else:
         num_workers = args.num_workers
 
+    args.save_stats = save_stat
     if args.save_stats:
         save_fid_stats(args.path, args.batch_size, device, args.dims, num_workers)
         return

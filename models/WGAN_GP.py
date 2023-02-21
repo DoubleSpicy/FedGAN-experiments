@@ -11,6 +11,8 @@ from torch.autograd import Variable
 import torch.distributed as dist
 from utils.lossLogger import lossLogger, FIDLogger
 
+from utils.fid.fid_score import compute_FID
+
 class Generator(torch.nn.Module):
     def __init__(self, img_shape):
         super().__init__()
@@ -97,86 +99,6 @@ class Discriminator(torch.nn.Module):
         x = self.model(x)
         return x.view(-1, 1024*4*4)
 
-
-def update_D(generator: Generator, 
-                    discriminator: Discriminator, 
-                    cuda=True, n_critic=10, 
-                    data=None, 
-                    batch_size=64, 
-                    debug=False, 
-                    n_epochs=1000, 
-                    lambda_term=10,
-                    g_iter=-1,
-                    id=-1,
-                    root='',
-                    size=0):
-    t_begin = t.time()
-
-    
-
-    one = torch.tensor(1, dtype=torch.float)
-    mone = one * -1
-    if cuda:
-        cuda_index=id % size
-        one = one.cuda(cuda_index)
-        mone = mone.cuda(cuda_index)
-
-    for p in discriminator.parameters():
-        p.requires_grad = True
-
-    d_loss_real = 0
-    d_loss_fake = 0
-    Wasserstein_D = 0
-    # Train Dicriminator forward-loss-backward-update self.critic_iter times while 1 Generator forward-loss-backward-update
-    for d_iter in range(n_critic):
-        discriminator.zero_grad()
-
-        images = data.__next__()
-        # Check for batch to have full batch_size
-        if (images.size()[0] != batch_size):
-            continue
-
-        z = torch.rand((batch_size, 100, 1, 1)).to(cuda_index)
-
-        images, z = get_torch_variable(images, True, cuda_index), get_torch_variable(z, True, cuda_index)
-
-        # Train discriminator
-        # WGAN - Training discriminator more iterations than generator
-        # Train with real images
-        d_loss_real = discriminator(images)
-        d_loss_real = d_loss_real.mean()
-        d_loss_real.backward(mone)
-
-        # Train with fake images
-        z = get_torch_variable(torch.randn(batch_size, 100, 1, 1)).to(cuda_index)
-
-        fake_images = generator(z).to(cuda_index)
-        d_loss_fake = discriminator(fake_images)
-        d_loss_fake = d_loss_fake.mean()
-        d_loss_fake.backward(one)
-
-        # Train with gradient penalty
-        gradient_penalty = calculate_gradient_penalty(images.data, fake_images.data, 
-                                                    discriminator,
-                                                    batch_size, 
-                                                    cuda, 
-                                                    cuda_index, 
-                                                    lambda_term)
-        gradient_penalty.backward()
-
-
-        d_loss = d_loss_fake - d_loss_real + gradient_penalty
-        Wasserstein_D = d_loss_real - d_loss_fake
-        discriminator.d_optimizer.step()
-        if debug:
-            print(f'  Device:{id%size} | ID:{id} | g_iter:{g_iter} | d_iter: {d_iter+1}/{n_critic} | loss_fake: {d_loss_fake} | loss_real: {d_loss_real}')
-
-
-
-    t_end = t.time()
-    print('Time of training-{}'.format((t_end - t_begin)))
-    # Save the trained parameters
-    save_model(generator, discriminator, id, root)
 
 def update(generator: Generator, 
                     discriminator: Discriminator, 
@@ -353,8 +275,36 @@ def save_sample(generator: Generator, cuda_index: int, root: str, g_iter: int):
 
 
 def generate_images(generator: Generator, batch_size = 64, cuda_index = 0):
+    for param in generator.parameters():
+        param.requires_grad = False
     z = get_torch_variable(torch.randn(64, 100, 1, 1), True, cuda_index)
     samples = generator(z).to(cuda_index)
     samples = samples.mul(0.5).add(0.5)
     samples = samples.data[:64]
+    for param in generator.parameters():
+        param.requires_grad = True
     return samples
+
+def calculate_FID(root: str, generator: Generator, discriminator: Discriminator, device: int, npz_path: str):
+    path = os.path.join(root, f'temp{device}')
+    if os.path.exists(path):
+        os.remove(path)
+    os.makedirs(path)
+
+    for param in generator.parameters():
+        param.requires_grad = False
+    for param in discriminator.parameters():
+        param.requires_grad = False
+    for i in range(10): # make 10 batches of samples 
+        images = generate_images(generator, 64, device)
+        samples = torch.unbind(images, dim=0)
+        for j in range(len(samples)):
+            utils.save_image(samples[j], path + "/" + str(i*64+j).zfill(6) + '.png')
+
+    score = compute_FID(path, npz_path)
+    os.remove(path)
+    for param in generator.parameters():
+        param.requires_grad = True
+    for param in discriminator.parameters():
+        param.requires_grad = True
+    return score

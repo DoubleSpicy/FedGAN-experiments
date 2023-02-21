@@ -4,20 +4,21 @@ import os
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+import torchvision
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from utils.loader import load_dataset, get_infinite_batches, load_model, save_model
 from utils.lossLogger import lossLogger, FIDLogger
 import argparse
 
+import numpy as np
 
-
-def init_process(rank, size, fn, backend='gloo'):
+def init_process(rank, size, trainloader, fn, backend='gloo'):
     """ Initialize the distributed environment. """
     os.environ['MASTER_ADDR'] = '127.0.0.1'
     os.environ['MASTER_PORT'] = '29500'
     dist.init_process_group(backend, rank=rank, world_size=size)
-    fn(rank, size)
+    fn(rank, size, trainloader)
 
 size = torch.cuda.device_count()
 parser = argparse.ArgumentParser()
@@ -65,7 +66,7 @@ assert model in ['GAN', 'WGAN-GP']
 if model == 'GAN':
     from models.GAN import Generator, Discriminator, update, update_G, send_params, recv_params, save_sample
 if model == 'WGAN-GP':
-    from models.WGAN_GP import Generator, Discriminator, update, save_sample, generate_images
+    from models.WGAN_GP import Generator, Discriminator, update, save_sample, generate_images, calculate_FID
 os.makedirs("runs", exist_ok=True)
 root = "runs/" + ''
 args_dict = dict(vars(args))
@@ -76,35 +77,23 @@ root += ('_' + model +'_' + str(proportion) + '_' + str(share_D) + '_' + dataset
 # print(share_D)
 os.makedirs(root, exist_ok=True)
 
-if average_method == 'wasserstein':
-    from barycenters import wasserstein
+from utils.fid.fid_score import compute_FID
 
-negative_proportion = [0.5, 0.1, 0.1, 0.1]
-
-def run(rank, size):
+def run(rank, size, trainloader):
     group = 'a' if rank < proportion else 'b'
     if random_colors == 'all_random':
         group = 'a' if (rank+1)/size <= proportion else 'b'
     print(f'rank: {rank} | group: {group}')
     img_shape = [3, 64, 64]
-    if not eval_only:
-        trainloader, img_shape = load_dataset(dataset_name=dataset_name,
-                        random_colors=random_colors, 
-                        client_cnt=1, 
-                        channels=channels, 
-                        batch_size=batch_size,
-                        colors = None, 
-                        debug=debug,
-                        root='.',
-                        P_Negative=negative_proportion[rank]
-                        )
-    print(f'rank: {dist.get_rank()}, dataloader ratio: {str(1-negative_proportion[rank])}:{negative_proportion[rank]}')
+    # if not eval_only:
     print('device:', rank%size)
 
     # loggers
     loss_logger = lossLogger(root, rank, ['d_loss_fake', 'd_loss_real', 'g_loss'], 'iterations', 'loss')
     FID_logger = FIDLogger(root, rank, 'iterations(*100)', 'FID score', os.getcwd(), ['fid'])
-
+    if rank == 0:
+        loss_logger_averaged = lossLogger(root, rank, ['d_loss_fake', 'd_loss_real', 'g_loss'], 'iterations(*100)', 'averaged G loss')
+        FID_logger_averaged = FIDLogger(root, rank, 'iterations(*100)', 'FID score', os.getcwd(), ['fid'])
     model_G = Generator(img_shape=img_shape).to(rank % size)
     if load_G:
         load_model(f'{root}/generator_pid_{dist.get_rank()}.pkl', model_G)
@@ -114,14 +103,15 @@ def run(rank, size):
     print('share_D:',share_D)
 
     if not eval_only:
+        precompute_npz(rank=rank, trainloader=trainloader)
         for i in range(1, n_epochs+1):
             print(f'iter {i}')
-            update(model_G, model_D, cuda=True, n_critic=int(n_critic/2), data=get_infinite_batches(trainloader[0]),
+            update(model_G, model_D, cuda=True, n_critic=int(n_critic/2), data=get_infinite_batches(trainloader),
             batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size, D_only=True, loss_logger=loss_logger, FID_logger=FID_logger)
             # average_params(model_G, 'G')
             # if share_D:
             #     average_params(model_D ,'D')
-            update(model_G, model_D, cuda=True, n_critic=int(n_critic/2), data=get_infinite_batches(trainloader[0]),
+            update(model_G, model_D, cuda=True, n_critic=int(n_critic/2), data=get_infinite_batches(trainloader),
             batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size, D_only=False, loss_logger=loss_logger, FID_logger=FID_logger)
             if i % avg_mod == 0:
                 average_params(model_G, 'G')
@@ -129,14 +119,32 @@ def run(rank, size):
                 average_params(model_D, 'D')
             if dist.get_rank() == 0 and (i % 100 == 0 or i == n_epochs):
                 save_sample(generator=model_G, cuda_index=rank % size, root=root, g_iter=i)
+                # calculate_FID()
             save_model(generator=model_G, discriminator=model_D, id=rank, root=root, averaged=True)
-            
+            calculate_FID(root=root, generator=model_G, discriminator=model_D, device=rank, npz_path='')
     if eval_only:
         # average_params(model_G, 'G')
         if dist.get_rank() == 0:
             save_sample(generator=model_G, cuda_index=rank % size, root=root, g_iter=n_epochs)
 
-
+def precompute_npz(rank: int, trainloader):
+    path = os.path.join(root, f'data{rank}')
+    allPath = os.path.join(root, f'dataAll')
+    # if os.path.exists(path):
+    #     os.removedirs(path)
+    # os.makedirs(path)
+    os.makedirs(allPath, exist_ok=True)
+    # batch = 0
+    # for _, (image, _) in enumerate(trainloader):
+    #     image = torch.unbind(image)
+    #     for j in range(len(image)):
+    #         torchvision.utils.save_image(image[j], path + "/" + str(batch*64+j).zfill(6) + '.png')
+    #         torchvision.utils.save_image(image[j], allPath + "/" + str(batch*64+j).zfill(6) + 'device' + str(rank) + '.png')
+    #     batch += 1
+    compute_FID([path, os.path.join(root, f'data{rank}.npz')], save_stat=True)
+    if rank == 0:
+        compute_FID([allPath, os.path.join(root, f'dataAll.npz')], save_stat=True)
+        
 def average_params(model: torch.nn.Module, str):
     print(f'rank:{dist.get_rank()}| averaging {str}')
     size = dist.get_world_size()
@@ -159,10 +167,16 @@ def avg_only(rank, size):
 if __name__ == "__main__":
     processes = []
     mp.set_start_method("spawn")
+    trainloader = []
+    if not eval_only:
+        ratios = np.random.default_rng().dirichlet((10, 10, 10, 10, 10, 10, 10, 10, 10, 10), size)
+        print(ratios)
+        trainloader = load_dataset(root=root,
+                                    dataset='CIFAR10',
+                                    client_ratio = ratios)
     for rank in range(size):
-        p = mp.Process(target=init_process, args=(rank, size, run))
+        p = mp.Process(target=init_process, args=(rank, size, trainloader[rank], run))
         p.start()
         processes.append(p)
-
     for p in processes:
         p.join()

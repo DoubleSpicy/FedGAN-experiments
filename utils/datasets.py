@@ -283,7 +283,37 @@ def splitCelebA(df: pd.DataFrame, client_ratio: list, tag: list = None) -> list:
 
     return [df[df.index.isin(a) | df.index.isin(b)] for a, b in zip(client_positive_index, client_negative_index)]
     
+def initCIFAR10_dirichlet(dirichlet_param: list, size: int, transforms):
+    # create 'size' CIFAR10 datasets, with assigned elements using specific ratios from dirichlet
+    dataset = [torchvision.datasets.CIFAR10('../data/', download=True, transform=transforms) for i in range(size)]
+    prob = np.random.default_rng().dirichlet(tuple(dirichlet_param), size)
+    prob_col_sum = np.sum(prob, axis=0)
+    max_col = np.max(prob_col_sum)
+    normalized_sum = [col / max_col for col in prob_col_sum]
+    count = [(prob[i] / prob_col_sum[i] * normalized_sum[i] * 5000).tolist() for i in range(size)]
+    for i in range(size): # round to int
+        for j in range(len(count[i])):
+            count[i][j] = math.floor(count[i][j])
+        print('By client samples count', i, count[i])
+    base_targets = dataset[0].targets.copy()
+    client_idx = [[] for i in range(size)]
+    for j in range(10): # by class assignment to each dataset
+        class_idx = [i for i in range(len(base_targets)) if base_targets[i] == j]
+        prev = 0
+        for i in range(size):
+            client_idx[i] += class_idx[prev: prev + count[i][j]]
+            prev = prev + count[i][j]
 
+    for i in range(size): # mask to each private dataset
+        idx_set = set(client_idx[i])
+        mask = [False for _ in range(len(dataset[i].targets))]
+        for j in range(len(dataset[i].targets)):
+            if j in idx_set:
+                mask[j] = True
+        dataset[i].targets = [dataset[i].targets[k] for k in range(len(mask)) if mask[k]]
+        dataset[i].data = [dataset[i].data[k] for k in range(len(mask)) if mask[k]]
+
+    return dataset
 # if __name__ == '__main__':
 #     data0 = CelebA(root='../data/', tags=['Eyeglasses'])
 #     data = split(data0.attribute_data, client_ratio=[[0.5, 0.5],  [0.9, 0.1],  [0.9, 0.1], [0.9, 0.1]], tag=['Eyeglasses'])
