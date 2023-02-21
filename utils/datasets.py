@@ -5,6 +5,7 @@ import os
 import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
+import torchvision
 import pandas as pd
 import numpy as np
 from PIL import Image
@@ -216,8 +217,8 @@ class TinyImageNet(Dataset):
         return len(self.attribute_data.index)*500
 
 
-class celeba(Dataset):
-    def __init__(self, root='../data/', tags: list = None) -> None:
+class CelebA(Dataset):
+    def __init__(self, root='../data/', tags: list = None, transform: transforms = None) -> None:
         super().__init__()
         self.root_dir = os.path.join(root, 'celeba')
         self.img_path = os.path.join(self.root_dir, 'img_align_celeba')
@@ -225,6 +226,7 @@ class celeba(Dataset):
         self.attribute_data = pd.read_csv(os.path.join(self.root_dir, 'list_attr_celeba.txt'), sep=' ', skiprows=[0])
         self.attribute_data.columns = ["filename"] + self.attribute_data.columns.tolist()[:-1]
         self.attribute_data = self.attribute_data[['filename'] + tags]
+        self.transform = transform
         print(self.attribute_data)
     
     def load(self, df: pd.DataFrame):
@@ -246,7 +248,8 @@ class celeba(Dataset):
     def __len__(self):
         return len(self.attribute_data.index)
 
-def split(df: pd.DataFrame, client_ratio: list, tag = None) -> list:
+
+def splitCelebA(df: pd.DataFrame, client_ratio: list, tag: list = None) -> list:
     tag = tag[0]
     client_positive, client_negative = 0.0, 0.0
     for i in range(len(client_ratio)):
@@ -281,12 +284,13 @@ def split(df: pd.DataFrame, client_ratio: list, tag = None) -> list:
     return [df[df.index.isin(a) | df.index.isin(b)] for a, b in zip(client_positive_index, client_negative_index)]
     
 
-if __name__ == '__main__':
-    data0 = celeba(root='../data/', tags=['Eyeglasses'])
-    data = split(data0.attribute_data, client_ratio=[[0.5, 0.5],  [0.9, 0.1],  [0.9, 0.1], [0.9, 0.1]], tag=['Eyeglasses'])
-    print('===============')
-    for d in data:
-        print(d)
-        print(len(d[d['Eyeglasses'] == 1]), len(d[d['Eyeglasses'] == -1]))
+# if __name__ == '__main__':
+#     data0 = CelebA(root='../data/', tags=['Eyeglasses'])
+#     data = split(data0.attribute_data, client_ratio=[[0.5, 0.5],  [0.9, 0.1],  [0.9, 0.1], [0.9, 0.1]], tag=['Eyeglasses'])
+#     print('===============')
+#     for d in data:
+#         print(d)
+#         print(len(d[d['Eyeglasses'] == 1]), len(d[d['Eyeglasses'] == -1]))
 
-
+#     dataCifar = torchvision.datasets.CIFAR10('../data/', download=True)
+#     print(dataCifar.targets)

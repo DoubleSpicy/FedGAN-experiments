@@ -1,5 +1,6 @@
 
 import torchvision.transforms as transforms
+from torchvision.datasets import CIFAR10
 from torchvision.utils import save_image
 
 from sklearn.model_selection import train_test_split
@@ -16,7 +17,7 @@ import math
 
 import os
 
-from utils.datasets import celeba, TinyImageNet, equalize
+from utils.datasets import celeba, TinyImageNet, equalize, CelebA, splitCelebA
 
 def get_infinite_batches(data_loader):
     while True:
@@ -167,19 +168,21 @@ def load_dataset(dataset_name,
 
 def load_dataset(root: str,
                 dataset: str,
-                client_proportion: list,
-                total_proportion: float,
-                tag_filter: list = None):
+                client_ratio: list,
+                tag_filter: list = None,
+                batch_size: int = 64          
+                ):
     transformA = [transforms.Resize([64, 64]),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+    size = len(client_ratio)
     if dataset == 'CelebA':
-        # dataset = celeba(root_dir='../data/', 
-        #                 attr_data='list_attr_celeba.txt', 
-        #                 img_path='img_align_celeba', 
-        #                 attr_filter=['+Male'],
-        #                 transform=transforms.Compose(transformA)
-        #                 ,proportion=P_Negative,
-        #                 rotary=True)
-        pass
+        datasets = [CelebA('../data/', tags=tag_filter, transform = transformA) for i in range(size)]
+        splittedData = splitCelebA(datasets[0].attribute_data, client_ratio=client_ratio, tag=tag_filter)
+        for i in range(size):
+            datasets[i].attribute_data = splittedData[i]
+        return [torch.utils.data.DataLoader(datasets[i], batch_size=batch_size, shuffle=True, drop_last=True) for i in range(size)]
+    elif dataset == 'CIFAR10':
+        datasets = [CIFAR10('../data/', download=True, transform=transformA) for i in range(size)]
+        return [torch.utils.data.DataLoader(datasets[i], batch_size=batch_size, shuffle=True, drop_last=True) for i in range(size)]
     return None
