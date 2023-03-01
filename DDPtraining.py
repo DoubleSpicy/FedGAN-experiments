@@ -10,7 +10,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from utils.loader import load_dataset, get_infinite_batches, load_model, save_model
 from utils.lossLogger import lossLogger, FIDLogger
 import argparse
-
+import shutil
 import numpy as np
 
 def init_process(rank, size, trainloader, fn, backend='gloo'):
@@ -70,12 +70,14 @@ if model == 'WGAN-GP':
 os.makedirs("runs", exist_ok=True)
 root = "runs/" + ''
 args_dict = dict(vars(args))
-for i, ii in args_dict.items():
-    print(i, ii)
+# for i, ii in args_dict.items():
+#     print(i, ii)
 #     root += (i + '_' + str(ii) + '_')
 root += ('_' + model +'_' + str(proportion) + '_' + str(share_D) + '_' + dataset_name + '_AvgMod_' + str(avg_mod) + '_delay_' + str(delay))
 # print(share_D)
-os.makedirs(root, exist_ok=True)
+# if os.path.exists(root):
+#     shutil.rmtree(root)
+# os.makedirs(root, exist_ok=True)
 
 from utils.fid.fid_score import compute_FID
 
@@ -90,10 +92,12 @@ def run(rank, size, trainloader):
 
     # loggers
     loss_logger = lossLogger(root, rank, ['d_loss_fake', 'd_loss_real', 'g_loss'], 'iterations', 'loss')
-    FID_logger = FIDLogger(root, rank, 'iterations(*100)', 'FID score', os.getcwd(), ['fid'])
-    if rank == 0:
-        loss_logger_averaged = lossLogger(root, rank, ['d_loss_fake', 'd_loss_real', 'g_loss'], 'iterations(*100)', 'averaged G loss')
-        FID_logger_averaged = FIDLogger(root, rank, 'iterations(*100)', 'FID score', os.getcwd(), ['fid'])
+    fid_cols = [f'vs_data{i}' for i in range(size)]
+    fid_cols.append('vs_dataAll')
+    FID_logger = FIDLogger(dir=root, id=rank, x_label='iterations(*100)', y_label='FID', columns=fid_cols)
+    print(FID_logger.columns)
+    # loss_logger_averaged = lossLogger(root, rank, ['d_loss_fake', 'd_loss_real', 'g_loss'], 'iterations(*100)', 'averaged G loss')
+    FID_logger_averaged = FIDLogger(dir=root, id=777+rank, x_label='iterations(*100)', y_label='FID score', columns=fid_cols)
     model_G = Generator(img_shape=img_shape).to(rank % size)
     if load_G:
         load_model(f'{root}/generator_pid_{dist.get_rank()}.pkl', model_G)
@@ -107,43 +111,56 @@ def run(rank, size, trainloader):
         for i in range(1, n_epochs+1):
             print(f'iter {i}')
             update(model_G, model_D, cuda=True, n_critic=int(n_critic/2), data=get_infinite_batches(trainloader),
-            batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size, D_only=True, loss_logger=loss_logger, FID_logger=FID_logger)
+            batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size, D_only=True, loss_logger=loss_logger)
             # average_params(model_G, 'G')
             # if share_D:
             #     average_params(model_D ,'D')
             update(model_G, model_D, cuda=True, n_critic=int(n_critic/2), data=get_infinite_batches(trainloader),
-            batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size, D_only=False, loss_logger=loss_logger, FID_logger=FID_logger)
+            batch_size=batch_size, debug=debug, n_epochs=n_epochs,lambda_term=10, g_iter=i, id=rank, root=root,size=size, D_only=False, loss_logger=loss_logger)
+            if i % 100 == 0 or i == 1:
+                FID_logger.concat(calculate_FID(root=root, generator=model_G, discriminator=model_D, device=rank, rank=rank))
             if i % avg_mod == 0:
                 average_params(model_G, 'G')
             if share_D:
                 average_params(model_D, 'D')
-            if dist.get_rank() == 0 and (i % 100 == 0 or i == n_epochs):
-                save_sample(generator=model_G, cuda_index=rank % size, root=root, g_iter=i)
-                # calculate_FID()
+            if i % 100 == 0 or i == n_epochs: # handle averaged stuff
+                if dist.get_rank() == 0:
+                    save_sample(generator=model_G, cuda_index=rank % size, root=root, g_iter=i)
+                print(f'rank {rank} computing FID after averaged')
+            if i % 100 == 0 or i == 1:
+                score = calculate_FID(root=root, generator=model_G, discriminator=model_D, device=rank, rank=rank)
+                FID_logger_averaged.concat(score)
             save_model(generator=model_G, discriminator=model_D, id=rank, root=root, averaged=True)
-            calculate_FID(root=root, generator=model_G, discriminator=model_D, device=rank, npz_path='')
+            
+            # print(f'{rank} vs dataAll: {score}')
     if eval_only:
         # average_params(model_G, 'G')
         if dist.get_rank() == 0:
             save_sample(generator=model_G, cuda_index=rank % size, root=root, g_iter=n_epochs)
 
 def precompute_npz(rank: int, trainloader):
+    if os.path.exists(os.path.join(root, f'data{rank}.npz')):
+        return
     path = os.path.join(root, f'data{rank}')
     allPath = os.path.join(root, f'dataAll')
-    # if os.path.exists(path):
-    #     os.removedirs(path)
-    # os.makedirs(path)
+    if os.path.exists(path):
+        shutil.rmtree(path)
+    if rank == 0 and os.path.exists(allPath):
+        shutil.rmtree(allPath)
+    os.makedirs(path, exist_ok=True)
     os.makedirs(allPath, exist_ok=True)
-    # batch = 0
-    # for _, (image, _) in enumerate(trainloader):
-    #     image = torch.unbind(image)
-    #     for j in range(len(image)):
-    #         torchvision.utils.save_image(image[j], path + "/" + str(batch*64+j).zfill(6) + '.png')
-    #         torchvision.utils.save_image(image[j], allPath + "/" + str(batch*64+j).zfill(6) + 'device' + str(rank) + '.png')
-    #     batch += 1
-    compute_FID([path, os.path.join(root, f'data{rank}.npz')], save_stat=True)
+    batch = 0
+    dist.barrier()
+    for _, (image, _) in enumerate(trainloader):
+        image = torch.unbind(image)
+        for j in range(len(image)):
+            torchvision.utils.save_image(image[j], path + "/" + str(batch*64+j).zfill(6) + '.png')
+            torchvision.utils.save_image(image[j], allPath + "/" + str(batch*64+j).zfill(6) + 'device' + str(rank) + '.png')
+        batch += 1
+    compute_FID([path, os.path.join(root, f'data{rank}.npz')], save_stat=True, rank=rank)
     if rank == 0:
-        compute_FID([allPath, os.path.join(root, f'dataAll.npz')], save_stat=True)
+        compute_FID([allPath, os.path.join(root, f'dataAll.npz')], save_stat=True, rank=rank)
+    dist.barrier()
         
 def average_params(model: torch.nn.Module, str):
     print(f'rank:{dist.get_rank()}| averaging {str}')

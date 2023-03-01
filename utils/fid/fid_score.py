@@ -42,33 +42,34 @@ from PIL import Image
 from scipy import linalg
 from torch.nn.functional import adaptive_avg_pool2d
 
-try:
-    from tqdm import tqdm
-except ImportError:
-    # If tqdm is not available, provide a mock version of it
-    def tqdm(x):
-        return x
+# try:
+#     from tqdm import tqdm
+# except ImportError:
+#     # If tqdm is not available, provide a mock version of it
+#     def tqdm(x):
+#         return x
 
 from utils.fid.inception import InceptionV3
 
-parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
-parser.add_argument('--batch-size', type=int, default=50,
-                    help='Batch size to use')
-parser.add_argument('--num-workers', type=int,
-                    help=('Number of processes to use for data loading. '
-                          'Defaults to `min(8, num_cpus)`'))
-parser.add_argument('--device', type=str, default=None,
-                    help='Device to use. Like cuda, cuda:0 or cpu')
-parser.add_argument('--dims', type=int, default=2048,
-                    choices=list(InceptionV3.BLOCK_INDEX_BY_DIM),
-                    help=('Dimensionality of Inception features to use. '
-                          'By default, uses pool3 features'))
-parser.add_argument('--save-stats', action='store_true',
-                    help=('Generate an npz archive from a directory of samples. '
-                          'The first path is used as input and the second as output.'))
-parser.add_argument('--path', type=str, nargs=2,
-                    help=('Paths to the generated images or '
-                          'to .npz statistic files'), default=['', ''], required=False)
+# parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
+
+# parser.add_argument('--batch-size', type=int, default=50,
+#                     help='Batch size to use')
+# parser.add_argument('--num-workers', type=int,
+#                     help=('Number of processes to use for data loading. '
+#                           'Defaults to `min(8, num_cpus)`'))
+# parser.add_argument('--device', type=str, default=None,
+#                     help='Device to use. Like cuda, cuda:0 or cpu')
+# parser.add_argument('--dims', type=int, default=2048,
+#                     choices=list(InceptionV3.BLOCK_INDEX_BY_DIM),
+#                     help=('Dimensionality of Inception features to use. '
+#                           'By default, uses pool3 features'))
+# parser.add_argument('--save-stats', action='store_true',
+#                     help=('Generate an npz archive from a directory of samples. '
+#                           'The first path is used as input and the second as output.'))
+# parser.add_argument('--path', type=str, nargs=2,
+#                     help=('Paths to the generated images or '
+#                           'to .npz statistic files'), default=['', ''], required=False)
 
 IMAGE_EXTENSIONS = {'bmp', 'jpg', 'jpeg', 'pgm', 'png', 'ppm',
                     'tif', 'tiff', 'webp'}
@@ -129,7 +130,7 @@ def get_activations(files, model, batch_size=50, dims=2048, device='cpu',
 
     start_idx = 0
 
-    for batch in tqdm(dataloader):
+    for batch in dataloader:
         batch = batch.to(device)
 
         with torch.no_grad():
@@ -285,17 +286,22 @@ def save_fid_stats(paths, batch_size, device, dims, num_workers=1):
     np.savez_compressed(paths[1], mu=m1, sigma=s1)
 
 
-def compute_FID(externalPaths: list = None, save_stat = False):
-    args = parser.parse_args()
+def compute_FID(externalPaths: list = None, save_stat = False, rank=0):
+    batch_size = 50
+    num_workers = None
+    device = None
+    dims = 2048
+    path = []
+    # args = parser.parse_args()
     if externalPaths != None:
-        args.path = externalPaths
+        path = externalPaths
 
-    if args.device is None:
-        device = torch.device('cuda' if (torch.cuda.is_available()) else 'cpu')
+    if device is None:
+        device = torch.device(f'cuda:{rank}' if (torch.cuda.is_available()) else 'cpu')
     else:
-        device = torch.device(args.device)
+        device = torch.device(device)
 
-    if args.num_workers is None:
+    if num_workers is None:
         try:
             num_cpus = len(os.sched_getaffinity(0))
         except AttributeError:
@@ -306,19 +312,19 @@ def compute_FID(externalPaths: list = None, save_stat = False):
 
         num_workers = min(num_cpus, 8) if num_cpus is not None else 0
     else:
-        num_workers = args.num_workers
+        num_workers = num_workers
 
-    args.save_stats = save_stat
-    if args.save_stats:
-        save_fid_stats(args.path, args.batch_size, device, args.dims, num_workers)
+    save_stats = save_stat
+    if save_stats:
+        save_fid_stats(path, batch_size, device, dims, num_workers)
         return
 
-    fid_value = calculate_fid_given_paths(args.path,
-                                          args.batch_size,
+    fid_value = calculate_fid_given_paths(path,
+                                          batch_size,
                                           device,
-                                          args.dims,
+                                          dims,
                                           num_workers)
-    print('FID: ', fid_value)
+    # print('FID: ', fid_value)
     return fid_value
 
 

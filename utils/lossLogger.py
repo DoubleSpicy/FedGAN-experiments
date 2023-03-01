@@ -53,17 +53,15 @@ class lossLogger(logger):
         self._write()
 
 class FIDLogger(logger):
-    def __init__(self, dir: str, id: int, x_label: str, y_label: str, precomputed: str, compute_func, columns: list = ['fid']) -> None:
+    def __init__(self, dir: str, id: int, x_label: str, y_label: str, columns: list = ['fid']) -> None:
         super().__init__(dir, id, columns, x_label, y_label)
-        self.npz = precomputed
 
     def cal_FID_score(self, path1):
         self.concat(fid.main([path1, self.npz]))
         self.draw()
 
 if __name__ == '__main__':
-    pass
-    # log = lossLogger('/mnt/e/ml/gan/', '0', ['d_loss_fake', 'd_loss_real', 'g_loss'], 'iterations', 'loss')
-    # log.data = pd.read_csv('/mnt/e/ml/gan/runs/_WGAN-GP_0.4_True_CelebA_AvgMod_1_delay_/lossLog0.csv')
-    # log.draw()
-    # fid.main(['../data/tiny-imagenet-200/train/n01629819/images', '../data/tiny-imagenet-200/train/n01784675/images'])
+    log = FIDLogger(dir='./', x_label='testX', y_label='testY', columns=['loss1','loss2','loss3'], id=0)
+    for i in range(5):
+        log.concat([i+j for j in range(3)])
+    

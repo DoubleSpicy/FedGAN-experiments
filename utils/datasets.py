@@ -286,11 +286,23 @@ def splitCelebA(df: pd.DataFrame, client_ratio: list, tag: list = None) -> list:
 def initCIFAR10_dirichlet(dirichlet_param: list, size: int, transforms):
     # create 'size' CIFAR10 datasets, with assigned elements using specific ratios from dirichlet
     dataset = [torchvision.datasets.CIFAR10('../data/', download=True, transform=transforms) for i in range(size)]
-    prob = np.random.default_rng().dirichlet(tuple(dirichlet_param), size)
+    # prob = np.random.default_rng().dirichlet(tuple(dirichlet_param), size)
+    flip = [11-dirichlet_param[i] for i in range(len(dirichlet_param))]
+    prob = np.random.default_rng().dirichlet(tuple(flip), 1)
+    prob = np.concatenate((prob, np.random.default_rng().dirichlet(tuple(dirichlet_param), size-1)))
     prob_col_sum = np.sum(prob, axis=0)
     max_col = np.max(prob_col_sum)
     normalized_sum = [col / max_col for col in prob_col_sum]
     count = [(prob[i] / prob_col_sum[i] * normalized_sum[i] * 5000).tolist() for i in range(size)]
+    # # baseline ONLY
+    # countBaseline = [[0 for i in range(10)]]
+    # for i in range(10):
+    #     for j in range(4):
+    #         countBaseline[0][i] += count[j][i]
+    # count = countBaseline
+    # size = 1
+    # # baseline ONLY
+
     for i in range(size): # round to int
         for j in range(len(count[i])):
             count[i][j] = math.floor(count[i][j])

@@ -185,6 +185,6 @@ def load_dataset(root: str,
     elif dataset == 'CIFAR10':
         size = torch.cuda.device_count()
         datasets = initCIFAR10_dirichlet(dirichlet_param=[10, 5, 3, 2, 3, 1, 1, 3, 4, 5]
-                                        , size=size, transforms=transformA)
+                                        , size=size, transforms=transformA) # set size=4 for baseline and gres 1 gpu ONLY
         return [torch.utils.data.DataLoader(datasets[i], batch_size=batch_size, shuffle=True, drop_last=True) for i in range(size)]
     return None

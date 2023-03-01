@@ -12,6 +12,7 @@ import torch.distributed as dist
 from utils.lossLogger import lossLogger, FIDLogger
 
 from utils.fid.fid_score import compute_FID
+import shutil
 
 class Generator(torch.nn.Module):
     def __init__(self, img_shape):
@@ -113,8 +114,8 @@ def update(generator: Generator,
                     root='',
                     size=0,
                     D_only=False,
-                    loss_logger: lossLogger = None,
-                    FID_logger: FIDLogger = None):
+                    loss_logger: lossLogger = None
+                    ):
     t_begin = t.time()
 
     
@@ -199,7 +200,8 @@ def update(generator: Generator,
         loss_logger.concat([d_loss_real, d_loss_fake, g_loss])
         if (g_iter) % 100 == 0:
             if not os.path.exists('{}/training_result_images/'.format(root)):
-                os.makedirs('{}/training_result_images/'.format(root))
+                #print('===============\ncreated img dir=============')
+                os.makedirs('{}/training_result_images/'.format(root), exist_ok=True)
 
             # Denormalize images and save them in grid 8x8
             z = get_torch_variable(torch.randn(800, 100, 1, 1), True, cuda_index)
@@ -285,12 +287,12 @@ def generate_images(generator: Generator, batch_size = 64, cuda_index = 0):
         param.requires_grad = True
     return samples
 
-def calculate_FID(root: str, generator: Generator, discriminator: Discriminator, device: int, npz_path: str):
+def calculate_FID(root: str, generator: Generator, discriminator: Discriminator, device: int, rank: int):
     path = os.path.join(root, f'temp{device}')
     if os.path.exists(path):
-        os.remove(path)
+        shutil.rmtree(path)
     os.makedirs(path)
-
+    size = dist.get_world_size()
     for param in generator.parameters():
         param.requires_grad = False
     for param in discriminator.parameters():
@@ -300,9 +302,17 @@ def calculate_FID(root: str, generator: Generator, discriminator: Discriminator,
         samples = torch.unbind(images, dim=0)
         for j in range(len(samples)):
             utils.save_image(samples[j], path + "/" + str(i*64+j).zfill(6) + '.png')
-
-    score = compute_FID(path, npz_path)
-    os.remove(path)
+    dist.barrier()
+    score = []
+    for j in range(size):
+        # score.append(j)
+        score.append(compute_FID([path, os.path.join(root, f'data{j}.npz')], rank=rank))
+        # score.append(calculate_FID(root=root, generator=generator, discriminator=discriminator, device=rank, npz_path=os.path.join(root, f'data{j}.npz'), rank=rank))
+        print(f'{rank} vs data{j}: {score[j]}')
+    # score.append(calculate_FID(root=root, generator=generator, discriminator=discriminator, device=rank, npz_path=os.path.join(root, f'dataAll.npz'), rank=rank))
+    score.append(compute_FID([path, os.path.join(root, f'dataAll.npz')], rank=rank))
+    dist.barrier()
+    shutil.rmtree(path)
     for param in generator.parameters():
         param.requires_grad = True
     for param in discriminator.parameters():
