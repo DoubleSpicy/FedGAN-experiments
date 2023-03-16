@@ -199,10 +199,6 @@ def update(generator: Generator,
         # write the logger
         loss_logger.concat([d_loss_real, d_loss_fake, g_loss])
         if (g_iter) % 100 == 0:
-            if not os.path.exists('{}/training_result_images/'.format(root)):
-                #print('===============\ncreated img dir=============')
-                os.makedirs('{}/training_result_images/'.format(root), exist_ok=True)
-
             # Denormalize images and save them in grid 8x8
             z = get_torch_variable(torch.randn(800, 100, 1, 1), True, cuda_index)
             samples = generator(z).to(cuda_index)
@@ -287,7 +283,11 @@ def generate_images(generator: Generator, batch_size = 64, cuda_index = 0):
         param.requires_grad = True
     return samples
 
-def calculate_FID(root: str, generator: Generator, discriminator: Discriminator, device: int, rank: int):
+def calculate_FID(root: str, generator: Generator, discriminator: Discriminator, device: int, rank: int, share_D: bool):
+    # score = list()
+    # for i in range(5):
+    #     for j in range(5):
+    #         score.append(i*5+j)
     path = os.path.join(root, f'temp{device}')
     if os.path.exists(path):
         shutil.rmtree(path)
@@ -306,11 +306,13 @@ def calculate_FID(root: str, generator: Generator, discriminator: Discriminator,
     score = []
     for j in range(size):
         # score.append(j)
-        score.append(compute_FID([path, os.path.join(root, f'data{j}.npz')], rank=rank))
+        fid_value, diff, sigma1, sigma2, tr_convmean, tr, frobenius = compute_FID([path, os.path.join(root, f'data{j}.npz')], rank=rank)
+        score.extend([fid_value, diff, sigma1, sigma2, tr_convmean, tr, frobenius])
         # score.append(calculate_FID(root=root, generator=generator, discriminator=discriminator, device=rank, npz_path=os.path.join(root, f'data{j}.npz'), rank=rank))
-        print(f'{rank} vs data{j}: {score[j]}')
+        # print(f'{rank} vs data{j}: {score[j]}')
     # score.append(calculate_FID(root=root, generator=generator, discriminator=discriminator, device=rank, npz_path=os.path.join(root, f'dataAll.npz'), rank=rank))
-    score.append(compute_FID([path, os.path.join(root, f'dataAll.npz')], rank=rank))
+    fid_value, diff, sigma1, sigma2, tr_convmean, tr, frobenius = compute_FID([path, os.path.join(root, f'dataAll.npz')], rank=rank)
+    score.extend([fid_value, diff, sigma1, sigma2, tr_convmean, tr, frobenius])
     dist.barrier()
     shutil.rmtree(path)
     for param in generator.parameters():

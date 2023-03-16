@@ -285,12 +285,20 @@ def splitCelebA(df: pd.DataFrame, client_ratio: list, tag: list = None) -> list:
     
 def initCIFAR10_dirichlet(dirichlet_param: list, size: int, transforms):
     # create 'size' CIFAR10 datasets, with assigned elements using specific ratios from dirichlet
+    transformB = transforms.Compose([transforms.Resize([64, 64]),
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.5, 0.5, 0.5), (0.0001, 0.0001, 0.0001))])
+    # SPECIAL SETTING
     dataset = [torchvision.datasets.CIFAR10('../data/', download=True, transform=transforms) for i in range(size)]
+    # dataset = [torchvision.datasets.CIFAR10('../data/', download=True, transform=(transforms if i > 0 else transformB)) for i in range(size)]
     # prob = np.random.default_rng().dirichlet(tuple(dirichlet_param), size)
-    flip = [11-dirichlet_param[i] for i in range(len(dirichlet_param))]
+    maxVal = max(dirichlet_param)+1
+    flip = [maxVal-dirichlet_param[i] for i in range(len(dirichlet_param))]
     prob = np.random.default_rng().dirichlet(tuple(flip), 1)
     prob = np.concatenate((prob, np.random.default_rng().dirichlet(tuple(dirichlet_param), size-1)))
+    print('prob\n', prob)
     prob_col_sum = np.sum(prob, axis=0)
+    print('prob_sum\n', prob_col_sum)
     max_col = np.max(prob_col_sum)
     normalized_sum = [col / max_col for col in prob_col_sum]
     count = [(prob[i] / prob_col_sum[i] * normalized_sum[i] * 5000).tolist() for i in range(size)]
@@ -326,8 +334,15 @@ def initCIFAR10_dirichlet(dirichlet_param: list, size: int, transforms):
         dataset[i].data = [dataset[i].data[k] for k in range(len(mask)) if mask[k]]
 
     return dataset
-# if __name__ == '__main__':
-#     data0 = CelebA(root='../data/', tags=['Eyeglasses'])
+if __name__ == '__main__':
+    transformA = transforms.Compose([transforms.Resize([64, 64]),
+                transforms.ToTensor(),
+                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    initCIFAR10_dirichlet(dirichlet_param=[10, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+                                        , size=4, transforms=transformA)
+
+                            
+    # data0 = CelebA(root='../data/', tags=['Eyeglasses'])
 #     data = split(data0.attribute_data, client_ratio=[[0.5, 0.5],  [0.9, 0.1],  [0.9, 0.1], [0.9, 0.1]], tag=['Eyeglasses'])
 #     print('===============')
 #     for d in data:
