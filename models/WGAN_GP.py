@@ -297,7 +297,7 @@ def calculate_FID(root: str, generator: Generator, discriminator: Discriminator,
         param.requires_grad = False
     for param in discriminator.parameters():
         param.requires_grad = False
-    for i in range(10): # make 10 batches of samples 
+    for i in range(157): # make 10k of samples use value = 157
         images = generate_images(generator, 64, device)
         samples = torch.unbind(images, dim=0)
         for j in range(len(samples)):
@@ -306,13 +306,15 @@ def calculate_FID(root: str, generator: Generator, discriminator: Discriminator,
     score = []
     for j in range(size):
         # score.append(j)
-        fid_value, diff, sigma1, sigma2, tr_convmean, tr, frobenius = compute_FID([path, os.path.join(root, f'data{j}.npz')], rank=rank)
-        score.extend([fid_value, diff, sigma1, sigma2, tr_convmean, tr, frobenius])
+        fid_value, diff, tr_sigma1, tr_sigma2, tr_convmean, tr, frobenious, sigma1 = compute_FID([path, os.path.join(root, f'data{j}.npz')], rank=rank)
+        score.extend([fid_value, diff, tr_sigma1, tr_sigma2, tr_convmean, tr, frobenious, sigma1]) #
+        # print('debug:', j, 'sigma1:', sigma1, 'size:', sigma1.shape)
+        # print('debug:', j, 'frobenious:', frobenious)
         # score.append(calculate_FID(root=root, generator=generator, discriminator=discriminator, device=rank, npz_path=os.path.join(root, f'data{j}.npz'), rank=rank))
         # print(f'{rank} vs data{j}: {score[j]}')
     # score.append(calculate_FID(root=root, generator=generator, discriminator=discriminator, device=rank, npz_path=os.path.join(root, f'dataAll.npz'), rank=rank))
-    fid_value, diff, sigma1, sigma2, tr_convmean, tr, frobenius = compute_FID([path, os.path.join(root, f'dataAll.npz')], rank=rank)
-    score.extend([fid_value, diff, sigma1, sigma2, tr_convmean, tr, frobenius])
+    fid_value, diff, tr_sigma1, tr_sigma2, tr_convmean, tr, frobenious, sigma1 = compute_FID([path, os.path.join(root, f'dataAll.npz')], rank=rank)
+    score.extend([fid_value, diff, tr_sigma1, tr_sigma2, tr_convmean, tr, frobenious, sigma1])
     dist.barrier()
     shutil.rmtree(path)
     for param in generator.parameters():

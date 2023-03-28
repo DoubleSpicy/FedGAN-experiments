@@ -204,7 +204,7 @@ def calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
     tr_covmean = np.trace(covmean)
 
     return (diff.dot(diff) + np.trace(sigma1)
-            + np.trace(sigma2) - 2 * tr_covmean), diff.dot(diff), np.trace(sigma1), np.trace(sigma2), tr_covmean, (np.trace(sigma1) + np.trace(sigma2) - 2 * tr_covmean), np.linalg.norm((sigma1-sigma2))
+            + np.trace(sigma2) - 2 * tr_covmean), diff.dot(diff), np.trace(sigma1), np.trace(sigma2), tr_covmean, (np.trace(sigma1) + np.trace(sigma2) - 2 * tr_covmean), np.linalg.norm((sigma1-sigma2)), sigma1
 
 
 def calculate_activation_statistics(files, model, batch_size=50, dims=2048,
@@ -261,9 +261,9 @@ def calculate_fid_given_paths(paths, batch_size, device, dims, num_workers=1):
                                         dims, device, num_workers)
     m2, s2 = compute_statistics_of_path(paths[1], model, batch_size,
                                         dims, device, num_workers)
-    fid_value, diff, sigma1, sigma2, tr_convmean, tr, frobenious = calculate_frechet_distance(m1, s1, m2, s2)
+    fid_value, diff, tr_sigma1, tr_sigma2, tr_convmean, tr, frobenious, sigma1  = calculate_frechet_distance(m1, s1, m2, s2)
 
-    return fid_value, diff, sigma1, sigma2, tr_convmean, tr, frobenious
+    return fid_value, diff, tr_sigma1, tr_sigma2, tr_convmean, tr, frobenious, sigma1
 
 
 def save_fid_stats(paths, batch_size, device, dims, num_workers=1):
@@ -319,13 +319,13 @@ def compute_FID(externalPaths: list = None, save_stat = False, rank=0):
         save_fid_stats(path, batch_size, device, dims, num_workers)
         return
 
-    fid_value, diff, sigma1, sigma2, tr_convmean, tr, frobenious = calculate_fid_given_paths(path,
+    fid_value, diff, tr_sigma1, tr_sigma2, tr_convmean, tr, frobenious, sigma1 = calculate_fid_given_paths(path,
                                           batch_size,
                                           device,
                                           dims,
                                           num_workers)
     # print('FID: ', fid_value)
-    return fid_value, diff, sigma1, sigma2, tr_convmean, tr, frobenious
+    return fid_value, diff, tr_sigma1, tr_sigma2, tr_convmean, tr, frobenious, sigma1
 
 
 if __name__ == '__main__':

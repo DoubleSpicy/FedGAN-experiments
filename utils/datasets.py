@@ -282,12 +282,50 @@ def splitCelebA(df: pd.DataFrame, client_ratio: list, tag: list = None) -> list:
         prevNeg += client_negative[i]+1
 
     return [df[df.index.isin(a) | df.index.isin(b)] for a, b in zip(client_positive_index, client_negative_index)]
-    
+
+def initCIFAR10_dirichlet_normal(size:int, transformer):
+    # size = 4
+    dataset = [torchvision.datasets.CIFAR10('../data/', download=True, transform=transformer) for i in range(size)]
+    prob = np.empty([size, 10])
+    for idx, sigma in enumerate([0, 1, 2, 3]):
+        prob[idx] = np.random.normal(5, sigma, 10)
+        for j in range(len(prob[idx])):
+            prob[idx][j] = max(prob[idx][j], 0)
+        print(f'prob{idx}', prob[idx])
+
+    count = []
+    for i in range(size-1, -1, -1):
+        # 1250 max
+        max_col = np.max(prob[i])
+        normalized_sum = [col / max_col for col in prob[i]]
+        count.append([math.floor(prob[i][j] / max_col * 1250) for j in range(10)])
+        print(f'count[{i}]',count[-1])
+
+    base_targets = dataset[0].targets.copy()
+    client_idx = [[] for i in range(size)]
+    for j in range(10): # by class assignment to each dataset
+        class_idx = [i for i in range(len(base_targets)) if base_targets[i] == j]
+        prev = 0
+        for i in range(size):
+            client_idx[i] += class_idx[prev: prev + count[i][j]]
+            prev = prev + count[i][j]
+
+
+    for i in range(size): # mask to each private dataset
+        idx_set = set(client_idx[i])
+        mask = [False for _ in range(len(dataset[i].targets))]
+        for j in range(len(dataset[i].targets)):
+            if j in idx_set:
+                mask[j] = True
+        dataset[i].targets = [dataset[i].targets[k] for k in range(len(mask)) if mask[k]]
+        dataset[i].data = [dataset[i].data[k] for k in range(len(mask)) if mask[k]]
+    return dataset
+
 def initCIFAR10_dirichlet(dirichlet_param: list, size: int, transforms):
     # create 'size' CIFAR10 datasets, with assigned elements using specific ratios from dirichlet
-    transformB = transforms.Compose([transforms.Resize([64, 64]),
-                    transforms.ToTensor(),
-                    transforms.Normalize((0.5, 0.5, 0.5), (0.0001, 0.0001, 0.0001))])
+    transformB = torchvision.transforms.Compose([torchvision.transforms.Resize([64, 64]),
+                    torchvision.transforms.ToTensor(),
+                    torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.0001, 0.0001, 0.0001))])
     # SPECIAL SETTING
     dataset = [torchvision.datasets.CIFAR10('../data/', download=True, transform=transforms) for i in range(size)]
     # dataset = [torchvision.datasets.CIFAR10('../data/', download=True, transform=(transforms if i > 0 else transformB)) for i in range(size)]
@@ -335,19 +373,16 @@ def initCIFAR10_dirichlet(dirichlet_param: list, size: int, transforms):
 
     return dataset
 if __name__ == '__main__':
-    transformA = transforms.Compose([transforms.Resize([64, 64]),
-                transforms.ToTensor(),
-                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-    initCIFAR10_dirichlet(dirichlet_param=[10, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-                                        , size=4, transforms=transformA)
-
-                            
-    # data0 = CelebA(root='../data/', tags=['Eyeglasses'])
-#     data = split(data0.attribute_data, client_ratio=[[0.5, 0.5],  [0.9, 0.1],  [0.9, 0.1], [0.9, 0.1]], tag=['Eyeglasses'])
-#     print('===============')
-#     for d in data:
-#         print(d)
-#         print(len(d[d['Eyeglasses'] == 1]), len(d[d['Eyeglasses'] == -1]))
-
-#     dataCifar = torchvision.datasets.CIFAR10('../data/', download=True)
-#     print(dataCifar.targets)
+    transformB = torchvision.transforms.Compose([torchvision.transforms.Resize([64, 64]),
+                        torchvision.transforms.ToTensor(),
+                        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.0001, 0.0001, 0.0001))])
+    # print('count:')
+    initCIFAR10_dirichlet_normal(4, transformB)
+    # prob_col_sum = np.sum(prob, axis=0)
+    # max_col = np.max(prob_col_sum)
+    # normalized_sum = [col / max_col for col in prob_col_sum]
+    # count = [(prob[i] / prob_col_sum[i] * normalized_sum[i] * 5000).tolist() for i in range(size)]
+    # for i in range(size): # round to int
+    #     for j in range(len(count[i])):
+    #         count[i][j] = math.floor(count[i][j])
+    #     print('By client samples count', i, count[i])

@@ -17,7 +17,7 @@ import math
 
 import os
 
-from utils.datasets import celeba, TinyImageNet, equalize, CelebA, splitCelebA, initCIFAR10_dirichlet
+from utils.datasets import celeba, TinyImageNet, equalize, CelebA, splitCelebA, initCIFAR10_dirichlet, initCIFAR10_dirichlet_normal
 
 def get_infinite_batches(data_loader):
     while True:
@@ -188,7 +188,8 @@ def load_dataset(root: str,
         # [10, 5, 3, 2, 3, 1, 1, 3, 4, 5]
         # [1, 2, 3, 4, 5, 5, 4, 3, 2, 1]
         # [1, 1, 1, 2, 2, 2, 2, 1, 1, 1]
-        datasets = initCIFAR10_dirichlet(dirichlet_param=[10, 10, 10, 10, 10, 1, 1, 1, 1, 1]
-                                        , size=size, transforms=transformA) # set size=4 for baseline and gres 1 gpu ONLY
+        datasets = initCIFAR10_dirichlet_normal(size, transformA)
+        # datasets = initCIFAR10_dirichlet(dirichlet_param=[10, 10, 10, 10, 10, 1, 1, 1, 1, 1]
+        #                                 , size=size, transforms=transformA) # set size=4 for baseline and gres 1 gpu ONLY
         return [torch.utils.data.DataLoader(datasets[i], batch_size=batch_size, shuffle=True, drop_last=True) for i in range(size)]
     return None
