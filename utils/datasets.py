@@ -4,13 +4,13 @@ custom dataset classes for loading different datasets
 import os
 import torch
 from torch.utils.data import Dataset
-from torchvision import transforms
+from torchvision import transforms, datasets
 import torchvision
 import pandas as pd
 import numpy as np
 from PIL import Image
 import random
-import skimage.io as io
+# import skimage.io as io
 import torch.distributed as dist
 import math
 
@@ -137,7 +137,6 @@ def equalizePD(a: pd.DataFrame, tag: str, proportion: float):
 #     # img = dataset.__getitem__(index=0)
 #     # print(dataset.attribute_data)
 #     # img.save('test.jpg')
-
 
 class TinyImageNet(Dataset):
     def __init__(self, root_dir: str, img_path: str, attr_data, attr_filter: list = None, transform: transforms = None):
@@ -283,6 +282,235 @@ def splitCelebA(df: pd.DataFrame, client_ratio: list, tag: list = None) -> list:
 
     return [df[df.index.isin(a) | df.index.isin(b)] for a, b in zip(client_positive_index, client_negative_index)]
 
+def initCIFAR10_shifting_peaks(transformer):
+    size = 4
+    dataset = [torchvision.datasets.CIFAR10('../data/', download=True, transform=transformer) for i in range(size)]
+    prob = np.empty([size, 10])
+    peak = {0: [0, 1, 2], 1: [3, 4, 5], 2: [6, 7], 3: [8, 9]}
+    for i in range(4):
+        dirichlet_param = ['1' for i in range(10)]
+        # peaks at 0-2, 3-5, 6-7, 8-9
+        dirichlet_param = [10 if j in peak[i] else 1 for j in range(10)]
+        prob[i] = np.random.default_rng().dirichlet(tuple(dirichlet_param), 1)
+    print('prob\n', prob)
+    prob_col_sum = np.sum(prob, axis=0)
+    print('prob_sum\n', prob_col_sum)
+    max_col = np.max(prob_col_sum)
+    normalized_sum = [col / max_col for col in prob_col_sum]
+    count = [(prob[i] / prob_col_sum[i] * normalized_sum[i] * 5000).tolist() for i in range(size)]
+
+    for i in range(size): # round to int
+        for j in range(len(count[i])):
+            count[i][j] = math.floor(count[i][j])
+        print('By client samples count', i, count[i])
+
+    base_targets = dataset[0].targets.copy()
+    client_idx = [[] for i in range(size)]
+    for j in range(10): # by class assignment to each dataset
+        class_idx = [i for i in range(len(base_targets)) if base_targets[i] == j]
+        prev = 0
+        for i in range(size):
+            client_idx[i] += class_idx[prev: prev + count[i][j]]
+            prev = prev + count[i][j]
+
+    for i in range(size): # mask to each private dataset
+        idx_set = set(client_idx[i])
+        mask = [False for _ in range(len(dataset[i].targets))]
+        for j in range(len(dataset[i].targets)):
+            if j in idx_set:
+                mask[j] = True
+        dataset[i].targets = [dataset[i].targets[k] for k in range(len(mask)) if mask[k]]
+        dataset[i].data = [dataset[i].data[k] for k in range(len(mask)) if mask[k]]
+
+    return dataset
+
+def proximate(v, center, margin = 0.001):
+    return abs(center - v) <= margin
+
+def initCIFAR10_exp(t):
+    n_parties = 4
+    # centers = [0.2070004407796384, 0.16791199200898635, 0.11857595253142467, 0.052471110080664365]
+    output = [[] for i in range(4)]
+    centers = [0.2845690307919289, 0.20651577619735473, 0.11907269615920968, 0.052383758524459346]
+    b = [0.01, 0.1, 0.5, 3] # params for 10 classes, std = .3, .2, .1, .05
+    for i in range(1, 5):
+        beta = np.array([b[i-1] for _ in range(10)])
+        sd = []
+        for j in range(10000):
+            proportions = np.random.dirichlet(beta)
+            sd.append(np.std(proportions))
+            # print("beta =", beta, " proportion =", proportions, " std =", np.std(proportions))
+            if proximate(sd[-1], centers[i-1]):
+                for v in proportions:
+                    # print('{:f}'.format(v), end=" ")
+                    pass
+                output[i-1] = proportions
+                # print()
+                break
+        # print(np.mean(sd))
+
+    # second phase
+    for p in output:
+        for v in p:
+            pass
+        #     print('{}'.format(math.floor(v*1250)), end=' ')
+        # print('\nstd = {}'.format(np.std(p*1250)))
+    # print('utilization:', end='')
+    utilization = []
+    for col in range(10):
+        sum = 0
+        for i in range(4):
+            sum += math.floor(output[i][col]*1250)
+        utilization.append(float(sum)/5000*100)
+        # print('{:2f}%'.format(utilization[-1]), end=' ')
+    
+    # phase drei
+    result = output
+    multiple = math.floor(100.0/max(utilization))
+    # print('\n', max(utilization), multiple)
+    for i in range(4):
+        for j in range(10):
+            result[i][j] = int(math.floor(math.floor(result[i][j]*1250*multiple)))
+    
+    for p in result:
+        for v in p:
+            print(int(v), end = ' ')
+        print('\nstd = {}'.format(np.std(p)))
+    print('refitted utilization:', end='')
+    utilization = []
+    for col in range(10):
+        sum = 0
+        for i in range(4):
+            sum += math.floor(result[i][col])
+        utilization.append(float(sum)/5000*100)
+        print('{:2f}%'.format(utilization[-1]), end=' ')
+    print()
+
+    dataset = [torchvision.datasets.CIFAR10('../data/', download=True, transform=t) for i in range(n_parties)]
+    y_train = np.array(dataset[0].targets)
+    new_targets = [[] for i in range(n_parties)]
+    for j in range(10):
+        classIdx = np.where(y_train == j)[0]
+        # print("{}".format(j), end=' | ')
+        s = 0
+        for i in range(n_parties):
+            requiredCount = int(result[i][j])
+            new_targets[i].extend(classIdx[:requiredCount].tolist())
+            classIdx = classIdx[requiredCount:]
+            # print(requiredCount, end=' ')
+            s += requiredCount
+        # print('| sum:', s)
+
+    for i in range(n_parties): # mask to each private dataset
+        idx_set = set(new_targets[i])
+        mask = [False for _ in range(len(dataset[i].targets))]
+        for j in range(len(dataset[i].targets)):
+            if j in idx_set:
+                mask[j] = True
+        dataset[i].targets = [dataset[i].targets[k] for k in range(len(mask)) if mask[k]]
+        # print(type(dataset[i].data))
+        dataset[i].data = [dataset[i].data[k] for k in range(len(mask)) if mask[k]]
+        # print(len(dataset[i]), len(dataset[i].data))
+
+    return dataset
+
+
+
+    
+            
+
+
+
+
+
+
+
+    
+
+def init_CIFAR10_iid_quantity():
+    # n_train = np.array(dataset[0].targets)
+    # idxs = np.random.permutation(n_train)
+    # min_size = 0
+    # while min_size < 10:
+    #     proportions = np.random.dirichlet(np.repeat(beta, n_parties))
+    #     proportions = proportions/proportions.sum()
+    #     min_size = np.min(proportions*len(idxs))
+    # proportions = (np.cumsum(proportions)*len(idxs)).astype(int)[:-1]
+    # batch_idxs = np.split(idxs,proportions)
+    # net_dataidx_map = {i: batch_idxs[i] for i in range(n_parties)}
+
+    # for i in range(n_parties):
+    #     net_dataidx_map[i] = net_dataidx_map[i].tolist()
+    pass
+
+def init_CIFAR10_neo(transformer):
+        # https://github.com/Xtra-Computing/NIID-Bench/blob/main/partition.py
+        n_parties = 4
+        dataset = [torchvision.datasets.CIFAR10('../data/', download=True, transform=transformer) for i in range(n_parties)]
+
+        
+
+        min_size = 0
+        min_require_size = 10
+
+        K = 10
+        N = 50000
+        y_train = np.array(dataset[0].targets)
+        net_dataidx_map = {}
+
+        beta = [1,2,3,4]
+
+        while min_size < min_require_size:
+            idx_batch = [[] for _ in range(n_parties)]
+            for k in range(K):
+                idx_k = np.where(y_train == k)[0]
+                np.random.shuffle(idx_k)
+                proportions = np.random.dirichlet(beta)
+                proportions = np.array([p * (len(idx_j) < N / n_parties) for p, idx_j in zip(proportions, idx_batch)])
+                proportions = proportions / proportions.sum()
+                proportions = (np.cumsum(proportions) * len(idx_k)).astype(int)[:-1]
+                idx_batch = [idx_j + idx.tolist() for idx_j, idx in zip(idx_batch, np.split(idx_k, proportions))]
+                min_size = min([len(idx_j) for idx_j in idx_batch])
+    
+        for j in range(n_parties):
+            np.random.shuffle(idx_batch[j])
+            net_dataidx_map[j] = idx_batch[j]
+
+        print('partition results:')
+        for k, v in net_dataidx_map.items():
+            tmp = np.array([y_train[vv] for vv in v])
+            for x in range(10):
+                print(len(np.where(tmp == x)[0]), end =' ')
+            print()
+        print('===================')
+
+        # map back to each client
+        for i in range(n_parties): # mask to each private dataset
+            idx_set = set(net_dataidx_map[i])
+            mask = [False for _ in range(len(dataset[i].targets))]
+            for j in range(len(dataset[i].targets)):
+                if j in idx_set:
+                    mask[j] = True
+            dataset[i].targets = [dataset[i].targets[k] for k in range(len(mask)) if mask[k]]
+            dataset[i].data = [dataset[i].data[k] for k in range(len(mask)) if mask[k]]
+        return dataset
+
+
+        
+    # beta = []
+    # for B in [1, 2, 3, 4]:
+    #     beta.extend([B for x in range(10)])
+    # n_parties = 4
+    # # print(np.repeat(beta, n_parties))
+    # proportions = np.random.dirichlet(np.repeat(beta, n_parties))
+    # # splitted = []
+    # col_sum = np.array([0 for i in range(10)])
+    # for i in range(4):
+    #     print(proportions[i*10: (i+1)*10]*5000)
+    #     col_sum = np.add(col_sum, np.array(proportions[i*10: (i+1)*10]))
+
+    
+
 def initCIFAR10_dirichlet_normal(size:int, transformer):
     # size = 4
     dataset = [torchvision.datasets.CIFAR10('../data/', download=True, transform=transformer) for i in range(size)]
@@ -372,12 +600,25 @@ def initCIFAR10_dirichlet(dirichlet_param: list, size: int, transforms):
         dataset[i].data = [dataset[i].data[k] for k in range(len(mask)) if mask[k]]
 
     return dataset
+
+def init_imageNet(transformer, size):
+    path = '/data/ssd/dataset/ImageNet/ILSVRC2012' # local copy on ssd (available on gpu{1..9}, gpu{17..59})
+    if not os.path.exists(path):
+        path =  '/research/dataset/ImageNet/ILSVRC2012' # NFS path
+    data = [datasets.ImageNet(root=path, split='train') for i in range(size)]
+    print(data[0].classes)
+    # for i in range(size):
+        
+    return data
+
+
 if __name__ == '__main__':
-    transformB = torchvision.transforms.Compose([torchvision.transforms.Resize([64, 64]),
-                        torchvision.transforms.ToTensor(),
-                        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.0001, 0.0001, 0.0001))])
-    # print('count:')
-    initCIFAR10_dirichlet_normal(4, transformB)
+    # transformB = torchvision.transforms.Compose([torchvision.transforms.Resize([64, 64]),
+    #                     torchvision.transforms.ToTensor(),
+    #                     torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.0001, 0.0001, 0.0001))])
+    # exp()
+    # # print('count:')
+    # initCIFAR10_dirichlet_normal(4, transformB)
     # prob_col_sum = np.sum(prob, axis=0)
     # max_col = np.max(prob_col_sum)
     # normalized_sum = [col / max_col for col in prob_col_sum]
@@ -386,3 +627,5 @@ if __name__ == '__main__':
     #     for j in range(len(count[i])):
     #         count[i][j] = math.floor(count[i][j])
     #     print('By client samples count', i, count[i])
+    # initCIFAR10_shifting_peaks(transformB)
+    pass

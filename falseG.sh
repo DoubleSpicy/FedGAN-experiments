@@ -1,3 +1,3 @@
 #!/bin/bash
 mkdir -p ./logs
-python3 DDPtraining.py --share_D False --model GAN > ./logs/cifarFalse.txt
+python3 DDPtraining.py --share_D False --model GAN > ./logs/cifarFalseGAN.txt

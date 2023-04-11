@@ -17,7 +17,7 @@ import math
 
 import os
 
-from utils.datasets import celeba, TinyImageNet, equalize, CelebA, splitCelebA, initCIFAR10_dirichlet, initCIFAR10_dirichlet_normal
+from utils.datasets import celeba, TinyImageNet, equalize, CelebA, splitCelebA, initCIFAR10_dirichlet, initCIFAR10_dirichlet_normal, initCIFAR10_shifting_peaks, init_imageNet, init_CIFAR10_neo, initCIFAR10_exp
 
 def get_infinite_batches(data_loader):
     while True:
@@ -177,19 +177,24 @@ def load_dataset(root: str,
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
     if dataset == 'CelebA':
         size = len(client_ratio)
-        datasets = [CelebA('../data/', tags=tag_filter, transform = transformA) for i in range(size)]
-        splittedData = splitCelebA(datasets[0].attribute_data, client_ratio=client_ratio, tag=tag_filter)
+        data = [CelebA('../data/', tags=tag_filter, transform = transformA) for i in range(size)]
+        splittedData = splitCelebA(data[0].attribute_data, client_ratio=client_ratio, tag=tag_filter)
         for i in range(size):
-            datasets[i].attribute_data = splittedData[i]
-        return [torch.utils.data.DataLoader(datasets[i], batch_size=batch_size, shuffle=True, drop_last=True) for i in range(size)]
+            data[i].attribute_data = splittedData[i]
     elif dataset == 'CIFAR10':
         size = torch.cuda.device_count()
         # last config 
         # [10, 5, 3, 2, 3, 1, 1, 3, 4, 5]
         # [1, 2, 3, 4, 5, 5, 4, 3, 2, 1]
         # [1, 1, 1, 2, 2, 2, 2, 1, 1, 1]
-        datasets = initCIFAR10_dirichlet_normal(size, transformA)
-        # datasets = initCIFAR10_dirichlet(dirichlet_param=[10, 10, 10, 10, 10, 1, 1, 1, 1, 1]
+        data = initCIFAR10_exp(transformA)
+        # data = initCIFAR10_dirichlet_normal(size, transformA)
+        # data = initCIFAR10_dirichlet(dirichlet_param=[10, 10, 10, 10, 10, 1, 1, 1, 1, 1]
         #                                 , size=size, transforms=transformA) # set size=4 for baseline and gres 1 gpu ONLY
-        return [torch.utils.data.DataLoader(datasets[i], batch_size=batch_size, shuffle=True, drop_last=True) for i in range(size)]
-    return None
+    elif dataset == 'ImageNet':
+        size = torch.cuda.device_count()
+        data = init_imageNet(transformer=transformA, size=size)
+    else:
+        return None
+    return [torch.utils.data.DataLoader(data[i], batch_size=batch_size, shuffle=True, drop_last=True) for i in range(size)]
+
