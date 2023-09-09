@@ -7,3 +7,7 @@
  - Average Generator and Discriminator, Average Generator Only
 ## GPU configuration
  - at least 2 GPU, tested with 4x RTX 2080ti/3090 on cluster
+## Datasets
+ - MNIST
+ - CelebA
+ - TinyImageNet
