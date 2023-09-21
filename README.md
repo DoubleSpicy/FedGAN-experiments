@@ -1,4 +1,4 @@
-# federated-GAN-FYP
+# FedGAN-experiments
 ## 3 GAN architectures
  - Vanilla GAN
  - DCGAN
